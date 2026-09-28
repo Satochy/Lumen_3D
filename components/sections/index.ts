@@ -1,0 +1,7 @@
+export { default as Hero_Section } from './Hero_Section'
+export { default as Catalog_Section } from './Catalog_Section'
+export { default as Delivery_Section } from './Delivery_Section'
+export { default as Feedbacks_Section } from './Feedbacks_Section'
+export { default as About_Section } from './About_Section'
+export { default as Especial_Order_Section } from './Especial_Order_Section'
+export { default as Region_Map } from './Region_Map'

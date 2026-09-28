@@ -1,0 +1,139 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  CLIENT
+  ADMIN
+}
+
+enum OrderStatus {
+  PENDING
+  PREPARING
+  PRINTING
+  POST_PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+enum LeadStatus {
+  NEW
+  ANALYZING
+  QUOTED
+  APPROVED
+  REJECTED
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String
+  phone     String?
+  role      Role     @default(CLIENT)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders    Order[]
+  questions Question[]
+
+  @@map("users")
+}
+
+model Product {
+  id          String   @id @default(uuid())
+  title       String
+  slug        String   @unique
+  description String
+  price       Float
+  stock       Int      @default(0)
+  images      String[]
+  category    String
+  dimensions  String?  // Ex: "15x10x10 cm"
+  weightGrams Float?
+  isFeatured  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  orderItems OrderItem[]
+  questions  Question[]
+
+  @@map("products")
+}
+
+model FilamentStock {
+  id            String   @id @default(uuid())
+  material      String   // PLA, ABS, PETG, Resin, etc.
+  color         String
+  hexColor      String?
+  spoolWeightKg Float    @default(1.0)
+  remainingGrams Float
+  minThresholdGrams Float @default(200)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("filament_stocks")
+}
+
+model Order {
+  id            String      @id @default(uuid())
+  userId        String
+  user          User        @relation(fields: [userId], references: [id])
+  status        OrderStatus @default(PENDING)
+  totalAmount   Float
+  shippingCost  Float       @default(0)
+  trackingCode  String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  items OrderItem[]
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id        String  @id @default(uuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  quantity  Int
+  priceUnit Float
+
+  @@map("order_items")
+}
+
+model LeadQuote {
+  id          String     @id @default(uuid())
+  clientName  String
+  clientEmail String
+  clientPhone String
+  stlFileUrl  String
+  notes       String?
+  status      LeadStatus @default(NEW)
+  estimatedPrice Float?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@map("lead_quotes")
+}
+
+model Question {
+  id        String   @id @default(uuid())
+  content   String
+  answer    String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("questions")
+}

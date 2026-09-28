@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+html { scroll-behavior: smooth; }
+section[id] { scroll-margin-top: 5rem; }
 :root {
   --background: #ffffff;
   --foreground: #171717;
@@ -23,4 +25,98 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Altura real em celulares (barra do navegador) */
+@supports (min-height: 100dvh) {
+  div.page-root { min-height: 100dvh; }
+}
+
+/* Revelar no scroll (ScrollReveal.tsx) */
+[data-reveal][data-reveal-state='hidden'] {
+  opacity: 0;
+  transform: translate3d(0, 28px, 0);
+  will-change: opacity, transform;
+}
+[data-reveal][data-reveal-state='shown'] {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 0.8s cubic-bezier(0.22, 1, 0.36, 1) var(--reveal-delay, 0ms),
+    transform 0.8s cubic-bezier(0.22, 1, 0.36, 1) var(--reveal-delay, 0ms);
+}
+
+/* Entrada do hero */
+@keyframes lumen-rise {
+  from { opacity: 0; transform: translate3d(0, 24px, 0); }
+  to   { opacity: 1; transform: none; }
+}
+.hero-in {
+  animation: lumen-rise 0.8s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+.hero-in-2 { animation-delay: 0.15s; }
+
+@keyframes lumen-float {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50%      { transform: translate3d(0, -8px, 0); }
+}
+.mascot-float { animation: lumen-float 6s ease-in-out infinite; }
+
+/* Botões */
+.btn-fx,
+.btn-soft { -webkit-tap-highlight-color: transparent; }
+.btn-fx:active,
+.btn-soft:active { transform: scale(0.96); }
+
+.btn-fx { position: relative; overflow: hidden; isolation: isolate; }
+.btn-fx::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, 0.35) 50%, transparent 65%);
+  transform: translateX(-120%);
+  pointer-events: none;
+}
+.btn-fx svg { transition: transform 0.25s ease; }
+
+@keyframes lumen-shine { to { transform: translateX(120%); } }
+
+/* Hover só onde existe hover (no toque não gruda) */
+@media (hover: hover) and (pointer: fine) {
+  .btn-fx:hover { transform: translateY(-2px); }
+  .btn-fx:hover::after { animation: lumen-shine 0.9s ease; }
+  .btn-fx:hover svg { transform: translate(2px, -2px); }
+
+  .btn-soft:hover { transform: translateY(-2px); box-shadow: 0 10px 28px -10px rgba(34, 211, 238, 0.35); }
+  .lift:hover { transform: translateY(-3px); }
+
+  .nav-link:hover::after { transform: scaleX(1); }
+}
+
+.nav-link { position: relative; }
+.nav-link::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: -6px;
+  height: 1px;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.3s ease;
+}
+
+/* Textos longos (e-mail) não estouram o card em telas estreitas */
+.contact-link > div:first-child > div:last-child { min-width: 0; overflow-wrap: anywhere; }
+
+/* Foco visível só para teclado (não altera o visual com mouse/toque) */
+a:focus-visible, button:focus-visible {
+  outline: 2px solid #22d3ee;
+  outline-offset: 3px;
+}
+
+/* Reduzir movimento */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .hero-in, .mascot-float, .btn-fx:hover::after { animation: none !important; }
+  .btn-fx:hover, .btn-soft:hover, .lift:hover { transform: none; }
 }

@@ -1,0 +1,5 @@
+{
+  "tailwindCSS.lint.suggestCanonicalClasses": "ignore"
+}
+//criada somente pra calar a boca do corretor de sintaxe do VSCode, 
+// que insiste em reclamar de classes do TailwindCSS.
