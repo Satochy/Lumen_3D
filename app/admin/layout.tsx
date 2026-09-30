@@ -7,11 +7,13 @@ export default function AdminLayout({
   children: React.ReactNode
 }) {
   return (
-    <div className="flex min-h-screen bg-slate-950 text-slate-100">
-      {/* Sidebar */}
-      <aside className="w-64 border-r border-slate-800 p-6 flex flex-col gap-6">
+    <div className="flex min-h-screen bg-[#050811] text-slate-100 font-sans">
+      {/* Sidebar Única */}
+      <aside className="w-64 border-r border-slate-800/80 p-6 flex flex-col gap-6 bg-[#050811] shrink-0">
         <div>
-          <h2 className="text-xl font-bold text-amber-500 tracking-wider">LÚMEN 3D</h2>
+          <h2 className="text-xl font-bold text-amber-500 tracking-wider">
+            LÚMEN 3D
+          </h2>
           <p className="text-xs text-slate-400">Painel de Controlo</p>
         </div>
 
@@ -21,6 +23,12 @@ export default function AdminLayout({
             className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-sm font-medium transition"
           >
             Dashboard
+          </Link>
+          <Link
+            href="/admin/products"
+            className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-sm font-medium transition"
+          >
+            Gerenciar Produtos
           </Link>
           <Link
             href="/admin/filaments"
@@ -37,7 +45,7 @@ export default function AdminLayout({
         </nav>
       </aside>
 
-      {/* Main Content */}
+      {/* Conteúdo Principal */}
       <main className="flex-1 p-8 overflow-y-auto">
         {children}
       </main>

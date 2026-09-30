@@ -1,4 +1,5 @@
-import { Header, Footer } from '@/components/layout'
+import { Header, Footer, Navbar } from '@/components/layout'
+import User_Actions from '@/components/layout/User_Actions'
 import { 
   Hero_Section, 
   Catalog_Section, 
@@ -42,7 +43,9 @@ export default async function Landing_Page() {
   return (
     <div className="page-root min-h-screen bg-[#050811] text-slate-100 flex flex-col font-sans selection:bg-cyan-500 selection:text-slate-950">
       {/* Header orquestrador */}
-      <Header user={user} />
+      <Header user={user}logoHref="#hero">
+        <Navbar />
+      </Header>
 
       <main className="flex-1">
         <Hero_Section />
@@ -52,7 +55,6 @@ export default async function Landing_Page() {
         <About_Section />
         <Especial_Order_Section />
       </main>
-
       <Footer />
     </div>
   );
