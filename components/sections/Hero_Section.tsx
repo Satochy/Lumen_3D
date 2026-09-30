@@ -3,7 +3,7 @@ import { Sparkles, Printer, Disc, ArrowUpRight } from 'lucide-react'
 
 export default function Hero_Section() {
   return (
-    <section className="py-12 md:py-20 relative overflow-hidden">
+    <section id="hero" data-reveal className="py-12 md:py-20 relative overflow-hidden">
       <div className="absolute top-0 right-1/4 w-96 h-96 bg-cyan-500/10 blur-[120px] pointer-events-none rounded-full" />
 
       <div className="max-w-5xl mx-auto px-6">
@@ -22,7 +22,9 @@ export default function Hero_Section() {
                 </div>
                 <h1 className="text-3xl max-[424px]:text-[length:clamp(1.35rem,calc((100vw_-_114px)/10.6),1.875rem)] max-[380px]:text-[length:clamp(1.2rem,calc((100vw_-_98px)/10.6),1.875rem)] md:text-5xl font-extrabold text-white tracking-tight leading-tight">
                   Transformamos suas ideias <br className="hidden sm:block" />
-                  <span className="text-cyan-400">do digital ao real.</span>
+                  <span className="text-cyan-400 hover-stroke-group inline-block cursor-default">
+                    do <span className="hover-stroke-target">digital</span> ao <span className="hover-stroke-target">real</span>.
+                  </span>
                 </h1>
                 <p className="text-slate-400 text-sm md:text-base mt-3 leading-relaxed">
                   Peças decorativas exclusivas, colecionáveis de alta precisão e protótipos sob medida impressos com máxima resolução e acabamento refinado.
@@ -30,11 +32,11 @@ export default function Hero_Section() {
               </div>
 
               <div className="grid grid-cols-2 max-[340px]:grid-cols-1 gap-3 pt-2 text-xs text-slate-300">
-                <div className="p-3 bg-cyan-950/30 border border-cyan-900/40 rounded-xl flex items-center gap-2.5">
+                <div className="p-3 bg-cyan-950/30 border border-cyan-900/40 rounded-xl flex items-center gap-2.5 hover-box-sway cursor-default">
                   <Printer className="w-4 h-4 text-cyan-400 shrink-0" />
                   <span>Alta Precisão Milimétrica</span>
                 </div>
-                <div className="p-3 bg-cyan-950/30 border border-cyan-900/40 rounded-xl flex items-center gap-2.5">
+                <div className="p-3 bg-cyan-950/30 border border-cyan-900/40 rounded-xl flex items-center gap-2.5 hover-box-sway cursor-default">
                   <Disc className="w-4 h-4 text-cyan-400 shrink-0" />
                   <span>Filamentos Premium (PLA/PETG)</span>
                 </div>
@@ -43,14 +45,14 @@ export default function Hero_Section() {
               <div className="pt-4 flex flex-col sm:flex-row sm:items-center gap-3">
                 <a
                   href="#catalogo"
-                  className="btn-fx justify-center px-6 py-3 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs rounded-xl transition shadow-lg shadow-cyan-500/20 flex items-center gap-2"
+                  className="btn-fx hover-btn-bounce justify-center px-6 py-3 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs rounded-xl transition shadow-lg shadow-cyan-500/20 flex items-center gap-2"
                 >
                   Explorar Catálogo
                   <ArrowUpRight className="w-4 h-4" />
                 </a>
                 <a
                   href="#orcamento"
-                  className="btn-soft text-center px-6 py-3 bg-cyan-950/60 hover:bg-cyan-900/60 border border-cyan-800/50 text-cyan-300 font-semibold text-xs rounded-xl transition"
+                  className="btn-soft hover-btn-bounce text-center px-6 py-3 bg-cyan-950/60 hover:bg-cyan-900/60 border border-cyan-800/50 text-cyan-300 font-semibold text-xs rounded-xl transition"
                 >
                   Cotar Peça Personalizada
                 </a>

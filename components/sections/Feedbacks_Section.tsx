@@ -5,12 +5,13 @@ export default function Feedbacks_Section() {
     <section data-reveal className="py-20 bg-[#04060d] border-t border-cyan-950">
       <div className="max-w-6xl mx-auto px-6 space-y-12">
         
+        {/* Cabeçalho */}
         <div className="text-center space-y-3 max-w-xl mx-auto">
           <div className="inline-flex items-center gap-2 text-cyan-400 text-xs font-bold tracking-wider max-[420px]:text-[11px] max-[420px]:tracking-wide uppercase px-3 py-1 bg-cyan-950/80 border border-cyan-800/50 rounded-full">
             <Users className="w-3.5 h-3.5" />
             <span>Depoimentos & Feedbacks</span>
           </div>
-          <h2 className="text-3xl md:text-4xl font-black text-white">
+          <h2 className="text-3xl md:text-4xl font-black text-white tracking-tight">
             O que nossos clientes dizem
           </h2>
           <p className="text-xs md:text-sm text-slate-400">
@@ -18,9 +19,15 @@ export default function Feedbacks_Section() {
           </p>
         </div>
 
+        {/* Grid de Depoimentos com Bounce Leve (Estilo Botão) */}
         <div className="grid md:grid-cols-3 gap-6">
           
-          <div data-reveal data-reveal-delay={0} className="relative bg-[#0a0e1a] border border-cyan-950 hover:border-cyan-500/40 p-6 rounded-2xl flex flex-col justify-between space-y-4 transition duration-300 group lift">
+          {/* Card 1 */}
+          <div 
+            data-reveal 
+            data-reveal-delay={0} 
+            className="hover-btn-bounce relative bg-[#0a0e1a] border border-cyan-950 hover:border-cyan-500/50 hover:bg-[#0d1325] hover:shadow-lg hover:shadow-cyan-500/10 p-6 rounded-2xl flex flex-col justify-between space-y-4 transition-all duration-300 group cursor-default"
+          >
             <div className="space-y-3">
               <div className="flex items-center gap-1 text-amber-400">
                 {[...Array(5)].map((_, i) => (
@@ -36,11 +43,16 @@ export default function Feedbacks_Section() {
                 <span className="text-xs font-bold text-white block">Daniel Felipe</span>
                 <span className="text-[10px] text-cyan-400 font-mono">Itapetininga - SP</span>
               </div>
-              <Quote className="w-6 h-6 text-cyan-500/20 group-hover:text-cyan-400/40 transition" />
+              <Quote className="w-6 h-6 text-cyan-500/20 group-hover:text-cyan-400/50 transition-colors duration-300" />
             </div>
           </div>
 
-          <div data-reveal data-reveal-delay={120} className="relative bg-[#0a0e1a] border border-cyan-950 hover:border-cyan-500/40 p-6 rounded-2xl flex flex-col justify-between space-y-4 transition duration-300 group lift">
+          {/* Card 2 */}
+          <div 
+            data-reveal 
+            data-reveal-delay={120} 
+            className="hover-btn-bounce relative bg-[#0a0e1a] border border-cyan-950 hover:border-cyan-500/50 hover:bg-[#0d1325] hover:shadow-lg hover:shadow-cyan-500/10 p-6 rounded-2xl flex flex-col justify-between space-y-4 transition-all duration-300 group cursor-default"
+          >
             <div className="space-y-3">
               <div className="flex items-center gap-1 text-amber-400">
                 {[...Array(5)].map((_, i) => (
@@ -56,11 +68,16 @@ export default function Feedbacks_Section() {
                 <span className="text-xs font-bold text-white block">Maria Clara</span>
                 <span className="text-[10px] text-cyan-400 font-mono">Cliente Verificado</span>
               </div>
-              <Quote className="w-6 h-6 text-cyan-500/20 group-hover:text-cyan-400/40 transition" />
+              <Quote className="w-6 h-6 text-cyan-500/20 group-hover:text-cyan-400/50 transition-colors duration-300" />
             </div>
           </div>
 
-          <div data-reveal data-reveal-delay={240} className="relative bg-[#0a0e1a] border border-cyan-950 hover:border-cyan-500/40 p-6 rounded-2xl flex flex-col justify-between space-y-4 transition duration-300 group lift">
+          {/* Card 3 */}
+          <div 
+            data-reveal 
+            data-reveal-delay={240} 
+            className="hover-btn-bounce relative bg-[#0a0e1a] border border-cyan-950 hover:border-cyan-500/50 hover:bg-[#0d1325] hover:shadow-lg hover:shadow-cyan-500/10 p-6 rounded-2xl flex flex-col justify-between space-y-4 transition-all duration-300 group cursor-default"
+          >
             <div className="space-y-3">
               <div className="flex items-center gap-1 text-amber-400">
                 {[...Array(5)].map((_, i) => (
@@ -76,7 +93,7 @@ export default function Feedbacks_Section() {
                 <span className="text-xs font-bold text-white block">Miguel Segato</span>
                 <span className="text-[10px] text-cyan-400 font-mono">Sorocaba</span>
               </div>
-              <Quote className="w-6 h-6 text-cyan-500/20 group-hover:text-cyan-400/40 transition" />
+              <Quote className="w-6 h-6 text-cyan-500/20 group-hover:text-cyan-400/50 transition-colors duration-300" />
             </div>
           </div>
 

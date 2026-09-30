@@ -23,7 +23,7 @@ export default function User_Actions({ user }: UserActionsProps) {
             href="/admin"
             aria-label="Painel Admin"
             title="Painel Admin"
-            className="btn-soft hidden md:flex items-center justify-center gap-1.5 w-10 h-10 lg:w-auto lg:h-auto lg:px-3 lg:py-1.5 text-xs font-semibold bg-cyan-950/60 border border-cyan-800/50 rounded-lg hover:border-cyan-400/50 text-cyan-300 transition"
+            className="btn-soft hover-btn-bounce hidden md:flex items-center justify-center gap-1.5 w-10 h-10 lg:w-auto lg:h-auto lg:px-3 lg:py-1.5 text-xs font-semibold bg-cyan-950/60 border border-cyan-800/50 rounded-lg hover:border-cyan-400/50 text-cyan-300 transition-all duration-300"
           >
             <Shield className="w-3.5 h-3.5 text-cyan-400" />
             <span className="hidden lg:inline">Painel Admin</span>
@@ -32,7 +32,7 @@ export default function User_Actions({ user }: UserActionsProps) {
 
         <Link
           href="/profile"
-          className="flex items-center gap-2 p-1.5 rounded-full bg-cyan-950/40 border border-cyan-800/40 hover:border-cyan-400/60 transition group"
+          className="hover-btn-bounce flex items-center gap-2 p-1.5 rounded-full bg-cyan-950/40 border border-cyan-800/40 hover:border-cyan-400/60 transition-all duration-300 group"
           title="Acessar minha conta"
         >
           <div className="w-8 h-8 rounded-full bg-cyan-500/20 border border-cyan-400/30 flex items-center justify-center text-cyan-300 overflow-hidden font-bold text-xs">
@@ -42,7 +42,7 @@ export default function User_Actions({ user }: UserActionsProps) {
               <User className="w-4 h-4 text-cyan-400" />
             )}
           </div>
-          <span className="text-xs font-semibold text-slate-200 pr-2 hidden lg:inline group-hover:text-cyan-300 transition">
+          <span className="text-xs font-semibold text-slate-200 pr-2 hidden lg:inline group-hover:text-cyan-300 transition-colors duration-300">
             {user.name}
           </span>
         </Link>
@@ -54,13 +54,13 @@ export default function User_Actions({ user }: UserActionsProps) {
     <div className="flex items-center gap-2">
       <Link
         href="/login"
-        className="hidden min-[400px]:block text-xs font-semibold px-3.5 py-2 text-slate-300 hover:text-cyan-400 transition"
+        className="hover-btn-bounce hidden min-[400px]:block text-xs font-semibold px-3.5 py-2 text-slate-300 hover:text-cyan-400 transition-all duration-300"
       >
         Entrar
       </Link>
       <Link
         href="/register"
-        className="btn-fx text-xs font-bold px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-950 rounded-lg transition shadow-md shadow-cyan-500/10"
+        className="btn-fx hover-btn-bounce text-xs font-bold px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-950 rounded-lg transition-all duration-300 shadow-md shadow-cyan-500/10"
       >
         Cadastrar
       </Link>

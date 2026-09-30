@@ -7,14 +7,19 @@ export default function About_Section() {
         <div className="grid lg:grid-cols-12 gap-12 items-center">
           
           <div className="lg:col-span-7 space-y-6">
-            <div className="inline-flex items-center gap-2 text-cyan-400 text-xs font-bold tracking-wider max-[420px]:text-[11px] max-[420px]:tracking-wide uppercase px-3 py-1 bg-cyan-950/80 border border-cyan-800/50 rounded-full">
+            {/* Badge com animação de balanço (Sway) */}
+            <div className="hover-box-sway inline-flex items-center gap-2 text-cyan-400 text-xs font-bold tracking-wider max-[420px]:text-[11px] max-[420px]:tracking-wide uppercase px-3 py-1 bg-cyan-950/80 border border-cyan-800/50 rounded-full cursor-default transition-all duration-300">
               <Target className="w-3.5 h-3.5" />
               <span>Nossa Identidade & Visão</span>
             </div>
 
-            <h2 className="text-3xl md:text-4xl font-black text-white tracking-tight">
+            {/* Título: "engenharia" e "arte digital." recebem o efeito especial; "&" permanece estático em ciano */}
+            <h2 className="hover-stroke-group text-3xl md:text-4xl font-black text-white tracking-tight cursor-default">
               Materializando ideias com <br className="hidden sm:block" />
-              <span className="text-cyan-400">engenharia & arte digital.</span>
+              <span className="text-cyan-400 inline-block">
+                <span className="hover-stroke-target inline-block">engenharia</span> &amp;{' '}
+                <span className="hover-stroke-target inline-block">arte digital.</span>
+              </span>
             </h2>
 
             <div className="space-y-4 text-xs md:text-sm text-slate-300 leading-relaxed">
@@ -26,16 +31,17 @@ export default function About_Section() {
               </p>
             </div>
 
+            {/* Caixas de métricas com balanço de destaque (Sway) */}
             <div className="grid sm:grid-cols-3 gap-3 pt-2">
-              <div className="p-3 bg-[#0a0e1a] border border-cyan-950 rounded-xl text-center">
+              <div className="hover-box-sway p-3 bg-[#0a0e1a] border border-cyan-950 hover:border-cyan-500/50 rounded-xl text-center cursor-default transition-all duration-300">
                 <span className="text-cyan-400 font-extrabold text-lg block">100%</span>
                 <span className="text-[10px] text-slate-400 uppercase tracking-wider">Resolução Premium</span>
               </div>
-              <div className="p-3 bg-[#0a0e1a] border border-cyan-950 rounded-xl text-center">
+              <div className="hover-box-sway p-3 bg-[#0a0e1a] border border-cyan-950 hover:border-cyan-500/50 rounded-xl text-center cursor-default transition-all duration-300">
                 <span className="text-cyan-400 font-extrabold text-lg block">PLA / PETG</span>
                 <span className="text-[10px] text-slate-400 uppercase tracking-wider">Materiais Nobres</span>
               </div>
-              <div className="p-3 bg-[#0a0e1a] border border-cyan-950 rounded-xl text-center">
+              <div className="hover-box-sway p-3 bg-[#0a0e1a] border border-cyan-950 hover:border-cyan-500/50 rounded-xl text-center cursor-default transition-all duration-300">
                 <span className="text-cyan-400 font-extrabold text-lg block">Sob Medida</span>
                 <span className="text-[10px] text-slate-400 uppercase tracking-wider">Prototipagem</span>
               </div>
@@ -55,12 +61,13 @@ export default function About_Section() {
                 </p>
               </div>
 
+              {/* Botões/Links de contato com Bounce leve (Estilo Botão) */}
               <div className="space-y-3">
                 <a
                   href="https://instagram.com/lumen.3d_"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="p-3.5 rounded-xl bg-cyan-950/30 border border-cyan-900/50 hover:border-cyan-400/60 flex items-center justify-between transition group lift contact-link"
+                  className="hover-btn-bounce p-3.5 rounded-xl bg-cyan-950/30 border border-cyan-900/50 hover:border-cyan-400/60 flex items-center justify-between transition-all duration-300 group contact-link"
                 >
                   <div className="flex items-center gap-3">
                     <div className="p-2 rounded-lg bg-cyan-500/10 text-cyan-400 group-hover:bg-cyan-500 group-hover:text-slate-950 transition">
@@ -78,7 +85,7 @@ export default function About_Section() {
                   href="https://wa.me/5515988324925"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="p-3.5 rounded-xl bg-cyan-950/30 border border-cyan-900/50 hover:border-cyan-400/60 flex items-center justify-between transition group lift contact-link"
+                  className="hover-btn-bounce p-3.5 rounded-xl bg-cyan-950/30 border border-cyan-900/50 hover:border-cyan-400/60 flex items-center justify-between transition-all duration-300 group contact-link"
                 >
                   <div className="flex items-center gap-3">
                     <div className="p-2 rounded-lg bg-cyan-500/10 text-cyan-400 group-hover:bg-cyan-500 group-hover:text-slate-950 transition">
@@ -94,7 +101,7 @@ export default function About_Section() {
 
                 <a
                   href="mailto:lumenimpressao3d@gmail.com"
-                  className="p-3.5 rounded-xl bg-cyan-950/30 border border-cyan-900/50 hover:border-cyan-400/60 flex items-center justify-between transition group lift contact-link"
+                  className="hover-btn-bounce p-3.5 rounded-xl bg-cyan-950/30 border border-cyan-900/50 hover:border-cyan-400/60 flex items-center justify-between transition-all duration-300 group contact-link"
                 >
                   <div className="flex items-center gap-3">
                     <div className="p-2 rounded-lg bg-cyan-500/10 text-cyan-400 group-hover:bg-cyan-500 group-hover:text-slate-950 transition">

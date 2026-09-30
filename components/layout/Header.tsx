@@ -1,4 +1,3 @@
-import Link from 'next/link'
 import Image from 'next/image'
 import Navbar from './Navbar'
 import UserActions from './User_Actions'
@@ -21,9 +20,7 @@ export default function Header({ user, children }: HeaderProps) {
   return (
     <header className="border-b border-cyan-950/40 bg-[#050811]/90 backdrop-blur-md sticky top-0 z-50">
       <div className="max-w-6xl mx-auto px-6 max-[360px]:px-4 h-20 [@media(max-height:500px)]:h-16 flex items-center justify-between">
-        
-        {/* Logo */}
-        <Link href="/" className="flex items-center gap-3 hover:opacity-90 transition">
+        <a href="#hero" className="hover-btn-bounce inline-flex items-center gap-3">
           <div className="relative w-15 h-15 flex items-center justify-center">
             <Image 
               src="/logo-completa.png" 
@@ -34,7 +31,7 @@ export default function Header({ user, children }: HeaderProps) {
               priority
             />
           </div>
-        </Link>
+        </a>
 
         {/* Navegação injetada ou padrão */}
         {children ? children : <Navbar />}

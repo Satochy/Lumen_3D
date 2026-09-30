@@ -19,22 +19,24 @@ export default function Delivery_Section() {
           <div className="absolute top-4 left-4 w-5 h-5 border-t-2 border-l-2 border-cyan-400 pointer-events-none" />
           <div className="absolute bottom-4 right-4 w-5 h-5 border-b-2 border-r-2 border-cyan-400 pointer-events-none" />
 
-          {/* Grid Responsivo: 1 coluna no Mobile/Tablet (<1024px), 2 colunas no Desktop (>=1024px) */}
+          {/* Grid Responsivo */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 items-center">
             
             {/* COLUNA ESQUERDA: Textos e Informações */}
             <div className="lg:col-span-6 flex flex-col space-y-5 w-full min-w-0">
               
-              {/* Badge */}
-              <div className="inline-flex items-center gap-2 text-cyan-400 text-xs font-bold tracking-wider uppercase px-3 py-1 bg-cyan-950/80 border border-cyan-800/50 rounded-full w-fit">
+              {/* Badge com animação de pílula igual à Hero */}
+              <div className="hover-box-sway inline-flex items-center gap-2 text-cyan-400 text-xs font-bold tracking-wider uppercase px-3.5 py-1.5 bg-cyan-950/80 border border-cyan-800/50 rounded-full w-fit cursor-default transition-all duration-300">
                 <Truck className="w-3.5 h-3.5" />
                 <span>Logística Rápida & Local</span>
               </div>
 
-              {/* Título */}
-              <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-white tracking-tight leading-tight">
+              {/* Título: Apenas "Frete Grátis" tem o stroke/bounce; " na Região" fica ciano fixo */}
+              <h2 className="hover-stroke-group text-2xl sm:text-3xl md:text-4xl font-black text-white tracking-tight leading-tight cursor-default">
                 Entrega Facilitada & <br className="hidden sm:inline" />
-                <span className="text-cyan-400">Frete Grátis na Região</span>
+                <span className="text-cyan-400 inline-block">
+                  <span className="hover-stroke-target inline-block">Frete Grátis</span> na Região
+                </span>
               </h2>
 
               {/* Descrição */}
@@ -42,8 +44,8 @@ export default function Delivery_Section() {
                 Com a <strong className="text-white">Lúmen 3D</strong>, as suas peças chegam mais rápido e sem custos adicionais de envio para entregas locais. Produzimos e entregamos diretamente em mãos com máxima segurança.
               </p>
 
-              {/* Itapetininga */}
-              <div className="flex items-start gap-3 p-3.5 rounded-xl bg-cyan-950/30 border border-cyan-900/40">
+              {/* Card 1: Efeito Sway/Bounce idêntico às pílulas/cards da Hero */}
+              <div className="hover-box-sway flex items-start gap-3 p-3.5 rounded-xl bg-cyan-950/30 border border-cyan-900/40 cursor-default transition-all duration-300">
                 <CheckCircle2 className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
                 <div className="min-w-0">
                   <span className="text-xs sm:text-sm font-bold text-white block">Itapetininga (Sede)</span>
@@ -51,8 +53,8 @@ export default function Delivery_Section() {
                 </div>
               </div>
 
-              {/* Vizinhos */}
-              <div className="flex items-start gap-3 p-3.5 rounded-xl bg-cyan-950/30 border border-cyan-900/40">
+              {/* Card 2: Efeito Sway/Bounce idêntico às pílulas/cards da Hero */}
+              <div className="hover-box-sway flex items-start gap-3 p-3.5 rounded-xl bg-cyan-950/30 border border-cyan-900/40 cursor-default transition-all duration-300">
                 <Compass className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
                 <div className="min-w-0">
                   <span className="text-xs sm:text-sm font-bold text-white block">Municípios Vizinhos</span>
@@ -62,13 +64,13 @@ export default function Delivery_Section() {
                 </div>
               </div>
 
-              {/* CTA */}
+              {/* CTA: Animação e comportamento idênticos aos botões da Hero */}
               <div className="pt-2">
                 <a
                   href={whatsappUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="btn-fx w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs sm:text-sm rounded-xl transition shadow-lg shadow-cyan-500/20"
+                  className="btn-fx hover-btn-bounce w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs sm:text-sm rounded-xl shadow-lg shadow-cyan-500/20"
                 >
                   <MapPin className="w-4 h-4" />
                   <span>Consultar Meu Endereço</span>
@@ -77,7 +79,7 @@ export default function Delivery_Section() {
             </div>
 
             {/* COLUNA DIREITA: Mapa Interativo */}
-            <div className="lg:col-span-6 w-full flex items-center justify-center min-w-0">
+            <div className="btn-fx lg:col-span-6 w-full flex items-center justify-center min-w-0">
               <RegionMap className="w-full" />
             </div>
 

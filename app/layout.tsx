@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
+import Scroll_Reveal from '@/components/Scroll_Reveal'
 
 export const metadata: Metadata = {
   title: 'Lúmen 3D | Do digital ao real.',
@@ -25,6 +26,7 @@ export default function RootLayout({
   return (
     <html lang="pt-BR" className="scroll-smooth">
       <body className="antialiased bg-[#050811] text-slate-100 overflow-x-hidden max-w-full w-full">
+        <Scroll_Reveal />
         {children}
       </body>
     </html>

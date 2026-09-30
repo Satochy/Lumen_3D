@@ -2,56 +2,75 @@
 
 import { useEffect } from 'react'
 
-const DURATION = 800 // ms — mantenha igual ao CSS (.8s)
+const REVEAL_TYPES = ['left', 'right', 'pop'] as const
 
 export default function Scroll_Reveal() {
   useEffect(() => {
     if (
-      typeof IntersectionObserver === 'undefined' ||
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      typeof window === 'undefined' ||
+      typeof IntersectionObserver === 'undefined'
     ) {
       return
     }
 
-    const timers: number[] = []
-    const els = Array.from(document.querySelectorAll<HTMLElement>('[data-reveal]'))
+    console.log('🚀 [Scroll_Reveal] A iniciar observador...')
+
+    const observedElements = new Set<Element>()
 
     const io = new IntersectionObserver(
       (entries) => {
-        for (const entry of entries) {
-          if (!entry.isIntersecting) continue
+        entries.forEach((entry) => {
           const el = entry.target as HTMLElement
-          io.unobserve(el)
-          el.dataset.revealState = 'shown'
-
-          // Ao terminar, devolve o elemento às classes originais
-          const delay = Number(el.dataset.revealDelay) || 0
-          timers.push(
-            window.setTimeout(() => {
-              delete el.dataset.revealState
-              el.style.removeProperty('--reveal-delay')
-            }, delay + DURATION + 100)
-          )
-        }
+          if (entry.isIntersecting) {
+            console.log('✨ [Scroll_Reveal] A revelar secção:', el.id || 'secção')
+            el.dataset.revealState = 'shown'
+          } else {
+            el.dataset.revealState = 'hidden'
+          }
+        })
       },
-      { rootMargin: '0px 0px -8% 0px', threshold: 0 }
+      {
+        rootMargin: '0px 0px -5% 0px',
+        threshold: 0,
+      }
     )
 
-    for (const el of els) {
-      // já está na tela (ou acima dela): não anima
-      if (el.getBoundingClientRect().top < window.innerHeight * 0.92) continue
-      el.dataset.revealState = 'hidden'
-      el.style.setProperty('--reveal-delay', `${Number(el.dataset.revealDelay) || 0}ms`)
-      io.observe(el)
+    const scanAndObserve = () => {
+      const els = Array.from(document.querySelectorAll<HTMLElement>('[data-reveal]'))
+
+      els.forEach((el) => {
+        if (!observedElements.has(el)) {
+          observedElements.add(el)
+
+          // 1. Sorteia o tipo de entrada
+          if (!el.dataset.revealType) {
+            const randomType = REVEAL_TYPES[Math.floor(Math.random() * REVEAL_TYPES.length)]
+            el.dataset.revealType = randomType
+          }
+
+          el.style.setProperty('--reveal-delay', `${Number(el.dataset.revealDelay) || 0}ms`)
+
+          // 2. Define o estado inicial com base na posição no ecran
+          const rect = el.getBoundingClientRect()
+          if (rect.top < window.innerHeight * 0.95 && rect.bottom > 0) {
+            el.dataset.revealState = 'shown'
+          } else {
+            el.dataset.revealState = 'hidden'
+          }
+
+          io.observe(el)
+        }
+      })
     }
 
+    scanAndObserve()
+
+    const mutationObserver = new MutationObserver(() => scanAndObserve())
+    mutationObserver.observe(document.body, { childList: true, subtree: true })
+
     return () => {
+      mutationObserver.disconnect()
       io.disconnect()
-      timers.forEach((t) => window.clearTimeout(t))
-      for (const el of els) {
-        delete el.dataset.revealState
-        el.style.removeProperty('--reveal-delay')
-      }
     }
   }, [])
 
