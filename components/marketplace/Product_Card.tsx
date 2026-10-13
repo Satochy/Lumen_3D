@@ -1,7 +1,7 @@
 'use client'
 
 import Image from 'next/image'
-import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useCart } from '@/context/Cart_Context'
 
 interface ProductProps {
@@ -15,21 +15,25 @@ interface ProductProps {
 }
 
 export default function Product_Card({ product }: { product: ProductProps }) {
+  const router = useRouter()
   const { addItem } = useCart()
 
   const mainImage = product.images?.[0] || '/placeholder.png'
 
   return (
-    <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl overflow-hidden flex flex-col justify-between hover:border-slate-700 transition group">
+    <div
+      onClick={() => router.push(`/marketplace/${product.slug}`)}
+      className="bg-slate-900/60 border border-slate-800/80 rounded-2xl overflow-hidden flex flex-col justify-between hover:border-slate-700 transition group cursor-pointer"
+    >
       {/* Imagem do Produto */}
-      <Link href={`/marketplace/${product.slug}`} className="block relative aspect-square w-full bg-slate-950 overflow-hidden">
+      <div className="relative aspect-square w-full bg-slate-950 overflow-hidden">
         <Image
           src={mainImage}
           alt={product.title}
           fill
           className="object-cover group-hover:scale-105 transition duration-300"
         />
-      </Link>
+      </div>
 
       {/* Informações e Botão de Ação */}
       <div className="p-4 flex flex-col flex-1 justify-between gap-3">
@@ -48,7 +52,8 @@ export default function Product_Card({ product }: { product: ProductProps }) {
           </span>
 
           <button
-            onClick={() =>
+            onClick={(e) => {
+              e.stopPropagation()
               addItem({
                 id: product.id,
                 title: product.title,
@@ -57,7 +62,7 @@ export default function Product_Card({ product }: { product: ProductProps }) {
                 image: mainImage,
                 stock: product.stock,
               })
-            }
+            }}
             className="px-3 py-1.5 bg-cyan-500 text-slate-950 font-bold text-xs rounded-lg hover:bg-cyan-400 active:scale-95 transition"
           >
             + Carrinho

@@ -1,5 +1,4 @@
 import { Header, Footer, Navbar } from '@/components/layout'
-import User_Actions from '@/components/layout/User_Actions'
 import { 
   Hero_Section, 
   Catalog_Section, 
