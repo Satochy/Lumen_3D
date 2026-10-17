@@ -1,7 +1,8 @@
 import { Header, Footer } from '@/components/layout'
 import { prisma } from '@/lib/prisma'
 import Cart_Button from '@/components/cart/Cart_Button'
-import Product_Card from '@/components/marketplace/Product_Card' 
+import Product_Card from '@/components/marketplace/Product_Card' // Importando o card oficial
+import { activeProducts, serializeProduct, type PublicProduct } from '@/lib/product_helpers'
 
 async function getCurrentUser() {
   return {
@@ -16,11 +17,13 @@ async function getCurrentUser() {
 export default async function MarketplacePage() {
   const user = await getCurrentUser()
 
-  let products: any[] = []
+  let products: PublicProduct[] = []
   try {
-    products = await prisma.product.findMany({
+    const rows = await prisma.product.findMany({
+      where: activeProducts,
       orderBy: { createdAt: 'desc' },
     })
+    products = rows.map(serializeProduct)
   } catch (error) {
     console.warn('Erro ao carregar produtos:', error)
   }

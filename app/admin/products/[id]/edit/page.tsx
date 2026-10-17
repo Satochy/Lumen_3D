@@ -10,9 +10,15 @@ interface EditProductPageProps {
 
 export default async function EditProductPage({ params }: EditProductPageProps) {
   const { id } = await params
-  const product = await prisma.product.findUnique({ where: { id } })
+  const rawProduct = await prisma.product.findUnique({ where: { id } })
 
-  if (!product) notFound()
+  if (!rawProduct) notFound()
+
+  // Converte o Decimal do Prisma para number para o Client Component aceitar
+  const product = {
+    ...rawProduct,
+    price: Number(rawProduct.price),
+  }
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">

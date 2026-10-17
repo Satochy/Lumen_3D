@@ -9,10 +9,13 @@ import {
   validateImageFiles,
 } from '@/lib/product_images'
 
-type ActionResult = { error: string } | undefined
+export type FormState = {
+  error: string
+}
 
-// TODO: trocar pela verificação real de ADMIN quando a autenticação (Supabase Auth) existir.
-// Hoje não bloqueia ninguém: enquanto isso, não publique o /admin.
+// Limite da coluna Decimal(10, 2)
+const MAX_PRICE = 99999999.99
+
 async function requireAdmin() {}
 
 function slugify(text: string) {
@@ -39,11 +42,23 @@ function getNewFiles(formData: FormData): File[] {
     .filter((f): f is File => f instanceof File && f.size > 0)
 }
 
-function parseFields(formData: FormData) {
+type ParsedProductData = {
+  title: string
+  description: string
+  category: string
+  price: number
+  stock: number
+  weightGrams: number | null
+  dimensions: string | null
+  isFeatured: boolean
+}
+
+function parseFields(formData: FormData): { error?: string; data?: ParsedProductData } {
   const title = String(formData.get('title') ?? '').trim()
   const description = String(formData.get('description') ?? '').trim()
   const category = String(formData.get('category') ?? '').trim() || 'Geral'
-  const price = parseFloat(String(formData.get('price') ?? '').replace(',', '.'))
+  const rawPrice = parseFloat(String(formData.get('price') ?? '').replace(',', '.'))
+  const price = Math.round(rawPrice * 100) / 100
   const stock = parseInt(String(formData.get('stock') ?? ''), 10)
   const rawWeight = String(formData.get('weightGrams') ?? '').replace(',', '.').trim()
   const weightGrams = rawWeight ? parseFloat(rawWeight) : null
@@ -51,7 +66,7 @@ function parseFields(formData: FormData) {
   const isFeatured = formData.get('isFeatured') === 'on'
 
   if (!title) return { error: 'Informe o título do produto.' }
-  if (!Number.isFinite(price) || price < 0) return { error: 'Preço inválido.' }
+  if (!Number.isFinite(price) || price < 0 || price > MAX_PRICE) return { error: 'Preço inválido.' }
   if (!Number.isInteger(stock) || stock < 0) return { error: 'Estoque inválido.' }
   if (weightGrams !== null && (!Number.isFinite(weightGrams) || weightGrams < 0)) {
     return { error: 'Peso inválido.' }
@@ -71,26 +86,28 @@ function revalidateStore(slug?: string) {
 }
 
 export async function createProductAction(
-  _prev: ActionResult,
+  _prev: any,
   formData: FormData
-): Promise<ActionResult> {
+): Promise<FormState> {
   await requireAdmin()
 
   const parsed = parseFields(formData)
-  if ('error' in parsed) return parsed
+  if (parsed.error) return { error: parsed.error }
+  if (!parsed.data) return { error: 'Dados inválidos.' }
+  const data = parsed.data
 
   const files = getNewFiles(formData)
   const fileError = validateImageFiles(files, 0)
   if (fileError) return { error: fileError }
 
-  const base = slugify(String(formData.get('slug') ?? '') || parsed.data.title)
+  const base = slugify(String(formData.get('slug') ?? '') || data.title)
   if (!base) return { error: 'Não foi possível gerar o slug. Use letras ou números no título.' }
   const slug = await uniqueSlug(base)
 
   let images: string[] = []
   try {
     images = await uploadProductImages(files)
-    await prisma.product.create({ data: { ...parsed.data, slug, images } })
+    await prisma.product.create({ data: { ...data, slug, images } })
   } catch (error) {
     console.error('Erro ao cadastrar produto:', error)
     await deleteProductImages(images)
@@ -103,16 +120,18 @@ export async function createProductAction(
 
 export async function updateProductAction(
   id: string,
-  _prev: ActionResult,
+  _prev: any,
   formData: FormData
-): Promise<ActionResult> {
+): Promise<FormState> {
   await requireAdmin()
 
   const current = await prisma.product.findUnique({ where: { id } })
   if (!current) return { error: 'Produto não encontrado.' }
 
   const parsed = parseFields(formData)
-  if ('error' in parsed) return parsed
+  if (parsed.error) return { error: parsed.error }
+  if (!parsed.data) return { error: 'Dados inválidos.' }
+  const data = parsed.data
 
   const kept = formData
     .getAll('existingImages')
@@ -129,7 +148,7 @@ export async function updateProductAction(
     uploaded = await uploadProductImages(files)
     await prisma.product.update({
       where: { id },
-      data: { ...parsed.data, images: [...kept, ...uploaded] },
+      data: { ...data, images: [...kept, ...uploaded] },
     })
   } catch (error) {
     console.error('Erro ao atualizar produto:', error)
@@ -137,16 +156,53 @@ export async function updateProductAction(
     return { error: 'Falha ao salvar as alterações. Tente novamente.' }
   }
 
-  await deleteProductImages(removed) 
+  await deleteProductImages(removed)
   revalidateStore(current.slug)
   redirect('/admin/products')
+}
+
+export async function archiveProductAction(id: string) {
+  await requireAdmin()
+
+  try {
+    const product = await prisma.product.update({
+      where: { id },
+      data: { archivedAt: new Date() },
+    })
+    revalidateStore(product.slug)
+  } catch (error) {
+    console.error('Erro ao arquivar produto:', id, error)
+  }
+}
+
+export async function restoreProductAction(id: string) {
+  await requireAdmin()
+
+  try {
+    const product = await prisma.product.update({
+      where: { id },
+      data: { archivedAt: null },
+    })
+    revalidateStore(product.slug)
+  } catch (error) {
+    console.error('Erro ao restaurar produto:', id, error)
+  }
 }
 
 export async function deleteProductAction(id: string) {
   await requireAdmin()
 
-  const product = await prisma.product.delete({ where: { id } })
-  await deleteProductImages(product.images)
+  const orderCount = await prisma.orderItem.count({ where: { productId: id } })
+  if (orderCount > 0) {
+    console.warn('Exclusão negada: produto com pedidos. Arquive-o.', id)
+    return
+  }
 
-  revalidateStore(product.slug)
+  try {
+    const product = await prisma.product.delete({ where: { id } })
+    await deleteProductImages(product.images)
+    revalidateStore(product.slug)
+  } catch (error) {
+    console.error('Erro -> excluir produto:', id, error)
+  }
 }

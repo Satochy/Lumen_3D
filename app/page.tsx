@@ -9,7 +9,6 @@ import {
 } from '@/components/sections'
 
 import { prisma } from '@/lib/prisma'
-import { Product } from '@prisma/client'
 
 export const revalidate = 0
 
@@ -29,12 +28,18 @@ async function getCurrentUser() {
 export default async function Landing_Page() {
   const user = await getCurrentUser()
 
-  let products: Product[] = []
+  let products: any[] = []
   try {
-    products = await prisma.product.findMany({
+    const rawProducts = await prisma.product.findMany({
       take: 6,
       orderBy: { createdAt: 'desc' },
     })
+    
+    // Converte o Decimal do Prisma para number para satisfazer a tipagem do componente cliente
+    products = rawProducts.map((product) => ({
+      ...product,
+      price: Number(product.price),
+    }))
   } catch (error) {
     console.warn('Tabela de produtos vazia ou banco desconectado:', error)
   }
@@ -42,7 +47,7 @@ export default async function Landing_Page() {
   return (
     <div className="page-root min-h-screen bg-[#050811] text-slate-100 flex flex-col font-sans selection:bg-cyan-500 selection:text-slate-950">
       {/* Header orquestrador */}
-      <Header user={user}logoHref="#hero">
+      <Header user={user} logoHref="#hero">
         <Navbar />
       </Header>
 
@@ -56,5 +61,5 @@ export default async function Landing_Page() {
       </main>
       <Footer />
     </div>
-  );
+  )
 }

@@ -30,8 +30,10 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# env files (ignora o .env real, mas permite o .env.example)
+.env
+.env.*
+!.env.example
 
 # vercel
 .vercel
@@ -39,3 +41,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# ia agents 
+.claude/
+
+# editor configs (opcional: ignora configurações locais do VS Code, mantendo apenas extensões recomendadas se houver)
+.vscode/*
+!.vscode/extensions.json

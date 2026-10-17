@@ -4,6 +4,12 @@ import { prisma } from '@/lib/prisma'
 import { OrderStatus } from '@prisma/client'
 import { revalidatePath } from 'next/cache'
 
+const ORDER_STATUSES: string[] = Object.values(OrderStatus)
+
+function isOrderStatus(value: string): value is OrderStatus {
+  return ORDER_STATUSES.includes(value)
+}
+
 export async function getOrders() {
   try {
     const orders = await prisma.order.findMany({
@@ -24,15 +30,23 @@ export async function getOrders() {
 }
 
 export async function updateOrderStatus(formData: FormData): Promise<void> {
-  const orderId = formData.get('orderId') as string
-  const status = formData.get('status') as OrderStatus
+  const orderId = String(formData.get('orderId') ?? '')
+  const status = String(formData.get('status') ?? '')
 
-  if (!orderId || !status) return
+  // O valor vem do navegador: só aceita o que existe no enum do schema.
+  if (!orderId || !isOrderStatus(status)) return
 
-  await prisma.order.update({
-    where: { id: orderId },
-    data: { status },
-  })
+  try {
+    await prisma.order.update({
+      where: { id: orderId },
+      data: { status },
+    })
+  } catch (error) {
+    // Pedido inexistente ou falha do banco: registra e não derruba a página.
+    console.error('Erro ao atualizar status do pedido:', orderId, error)
+    return
+  }
 
   revalidatePath('/admin/orders')
+  revalidatePath('/admin') // o painel conta pedidos pendentes
 }

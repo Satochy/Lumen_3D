@@ -1,12 +1,20 @@
+import type { OrderStatus } from '@prisma/client'
 import { getOrders, updateOrderStatus } from '@/app/actions/orders'
 
-const statusBadges: Record<string, { label: string; style: string }> = {
+// A ordem das chaves define a ordem das opções do <select>.
+// Tipar com Record<OrderStatus, ...> faz o TypeScript acusar se o enum do
+// schema ganhar ou perder um status e esta tela ficar desatualizada.
+const statusBadges: Record<OrderStatus, { label: string; style: string }> = {
   PENDING: { label: 'Aguardando', style: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
+  PREPARING: { label: 'Preparando', style: 'bg-sky-500/10 text-sky-400 border-sky-500/20' },
   PRINTING: { label: 'Em Impressão', style: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
-  FINISHING: { label: 'Acabamento', style: 'bg-purple-500/10 text-purple-400 border-purple-500/20' },
-  COMPLETED: { label: 'Concluído', style: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
+  POST_PROCESSING: { label: 'Acabamento', style: 'bg-purple-500/10 text-purple-400 border-purple-500/20' },
+  SHIPPED: { label: 'Enviado', style: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20' },
+  DELIVERED: { label: 'Entregue', style: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
   CANCELLED: { label: 'Cancelado', style: 'bg-red-500/10 text-red-400 border-red-500/20' },
 }
+
+const statusOptions = Object.keys(statusBadges) as OrderStatus[]
 
 export default async function OrdersPage() {
   const result = await getOrders()
@@ -63,11 +71,11 @@ export default async function OrdersPage() {
                         defaultValue={order.status}
                         className="bg-slate-950 border border-slate-800 text-xs text-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-amber-500"
                       >
-                        <option value="PENDING">Aguardando</option>
-                        <option value="PRINTING">Em Impressão</option>
-                        <option value="FINISHING">Acabamento</option>
-                        <option value="COMPLETED">Concluído</option>
-                        <option value="CANCELLED">Cancelado</option>
+                        {statusOptions.map((status) => (
+                          <option key={status} value={status}>
+                            {statusBadges[status].label}
+                          </option>
+                        ))}
                       </select>
                       <button
                         type="submit"
@@ -89,8 +97,9 @@ export default async function OrdersPage() {
                           <span className="font-medium text-slate-200">{item.product.title}</span>
                           <span className="text-xs text-slate-400 ml-2">x{item.quantity}</span>
                         </div>
+                        {/* priceUnit = preço da época da compra (não muda se o produto for reajustado) */}
                         <span className="text-xs text-slate-400">
-                          Preço Unit.: R$ {item.product.price.toFixed(2)}
+                          Preço Unit.: R$ {item.priceUnit.toFixed(2)}
                         </span>
                       </li>
                     ))}

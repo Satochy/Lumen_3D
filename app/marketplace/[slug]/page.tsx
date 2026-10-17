@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import Cart_Button from '@/components/cart/Cart_Button'
 import { notFound } from 'next/navigation'
 import { AddToCartButton } from '@/components/cart/Add_To_Cart_Button'
+import { serializeProduct, type PublicProduct } from '@/lib/product_helpers'
 
 async function getCurrentUser() {
   return {
@@ -24,18 +25,23 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
   const { slug } = await params
   const user = await getCurrentUser()
 
-  let product = null
-try {
-  product = await prisma.product.findUnique({ where: { slug } })
-} catch (error) {
-  console.error('Erro ao buscar produto. slug:', slug, error)
-  throw error
-}
-console.log('[produto] slug:', JSON.stringify(slug), '| encontrado:', !!product)
+  let product: PublicProduct | null = null
+  try {
+    // Busca estrita e direta pelo campo único @unique slug conforme o schema
+    const row = await prisma.product.findUnique({
+      where: { slug },
+    })
+    // Produto arquivado se comporta como inexistente para o público
+    if (row && !row.archivedAt) {
+      product = serializeProduct(row)
+    }
+  } catch (error) {
+    console.error('Erro ao buscar produto:', error)
+  }
 
-if (!product) {
-  notFound()
-}
+  if (!product) {
+    notFound()
+  }
 
   const mainImage = product.images?.[0] || '/placeholder.png'
 

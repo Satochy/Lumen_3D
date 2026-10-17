@@ -1,11 +1,18 @@
 import Link from 'next/link'
 import { prisma } from '@/lib/prisma'
-import { createProductAction, deleteProductAction } from '@/app/actions/product_actions'
+import {
+  createProductAction,
+  deleteProductAction,
+  archiveProductAction,
+  restoreProductAction,
+} from '@/app/actions/product_actions'
 import Product_Form from '@/components/admin/Product_Form'
 
 export default async function AdminProductsPage() {
+  // O admin enxerga tudo, inclusive arquivados. _count indica se o produto já foi vendido.
   const products = await prisma.product.findMany({
     orderBy: { createdAt: 'desc' },
+    include: { _count: { select: { orderItems: true } } },
   })
 
   return (
@@ -39,36 +46,81 @@ export default async function AdminProductsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
-                {products.map((product) => (
-                  <tr key={product.id} className="hover:bg-slate-800/30">
-                    <td className="p-3 font-medium text-slate-100">{product.title}</td>
-                    <td className="p-3">R$ {product.price.toFixed(2)}</td>
-                    <td className="p-3">
-                      <span className={`px-2 py-0.5 rounded text-[11px] ${product.stock > 0 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'}`}>
-                        {product.stock} un
-                      </span>
-                    </td>
-                    <td className="p-3 text-slate-400">{product.category}</td>
-                    <td className="p-3">
-                      <div className="flex items-center justify-end gap-2">
-                        <Link
-                          href={`/admin/products/${product.id}/edit`}
-                          className="bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 px-3 py-1 rounded text-xs transition"
-                        >
-                          Editar
-                        </Link>
-                        <form action={deleteProductAction.bind(null, product.id)}>
-                          <button
-                            type="submit"
-                            className="bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 px-3 py-1 rounded text-xs transition"
+                {products.map((product) => {
+                  const isArchived = product.archivedAt !== null
+                  const hasOrders = product._count.orderItems > 0
+
+                  return (
+                    <tr
+                      key={product.id}
+                      className={`hover:bg-slate-800/30 ${isArchived ? 'opacity-60' : ''}`}
+                    >
+                      <td className="p-3 font-medium text-slate-100">
+                        {product.title}
+                        {isArchived && (
+                          <span className="ml-2 px-2 py-0.5 rounded text-[10px] bg-slate-800 text-slate-300 border border-slate-700">
+                            Arquivado
+                          </span>
+                        )}
+                      </td>
+                      <td className="p-3">R$ {product.price.toFixed(2)}</td>
+                      <td className="p-3">
+                        <span className={`px-2 py-0.5 rounded text-[11px] ${product.stock > 0 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'}`}>
+                          {product.stock} un
+                        </span>
+                      </td>
+                      <td className="p-3 text-slate-400">{product.category}</td>
+                      <td className="p-3">
+                        <div className="flex items-center justify-end gap-2">
+                          <Link
+                            href={`/admin/products/${product.id}/edit`}
+                            className="bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 px-3 py-1 rounded text-xs transition"
                           >
-                            Excluir
-                          </button>
-                        </form>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                            Editar
+                          </Link>
+
+                          {isArchived ? (
+                            <form action={restoreProductAction.bind(null, product.id)}>
+                              <button
+                                type="submit"
+                                className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-3 py-1 rounded text-xs transition"
+                              >
+                                Restaurar
+                              </button>
+                            </form>
+                          ) : (
+                            <form action={archiveProductAction.bind(null, product.id)}>
+                              <button
+                                type="submit"
+                                className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 px-3 py-1 rounded text-xs transition"
+                              >
+                                Arquivar
+                              </button>
+                            </form>
+                          )}
+
+                          {hasOrders ? (
+                            <span
+                              title="Produto com pedidos não pode ser excluído. Use Arquivar."
+                              className="text-[10px] text-slate-500 px-1"
+                            >
+                              Com pedidos
+                            </span>
+                          ) : (
+                            <form action={deleteProductAction.bind(null, product.id)}>
+                              <button
+                                type="submit"
+                                className="bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 px-3 py-1 rounded text-xs transition"
+                              >
+                                Excluir
+                              </button>
+                            </form>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>

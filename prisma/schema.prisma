@@ -47,19 +47,20 @@ model User {
 }
 
 model Product {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   title       String
-  slug        String   @unique
+  slug        String    @unique
   description String
-  price       Float
-  stock       Int      @default(0)
+  price       Decimal   @db.Decimal(10, 2)
+  stock       Int       @default(0)
   images      String[]
   category    String
-  dimensions  String?  // Ex: "15x10x10 cm"
+  dimensions  String?   // Ex: "15x10x10 cm"
   weightGrams Float?
-  isFeatured  Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  isFeatured  Boolean   @default(false)
+  archivedAt  DateTime? // null = ativo; preenchido = arquivado (sai da loja, histórico preservado)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   orderItems OrderItem[]
   questions  Question[]
@@ -86,8 +87,8 @@ model Order {
   userId        String
   user          User        @relation(fields: [userId], references: [id])
   status        OrderStatus @default(PENDING)
-  totalAmount   Float
-  shippingCost  Float       @default(0)
+  totalAmount   Decimal     @db.Decimal(10, 2)
+  shippingCost  Decimal     @default(0) @db.Decimal(10, 2)
   trackingCode  String?
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
@@ -98,13 +99,14 @@ model Order {
 }
 
 model OrderItem {
-  id        String  @id @default(uuid())
-  orderId   String
-  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  productId String
-  product   Product @relation(fields: [productId], references: [id])
-  quantity  Int
-  priceUnit Float
+  id           String  @id @default(uuid())
+  orderId      String
+  order        Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId    String
+  product      Product @relation(fields: [productId], references: [id])
+  productTitle String  // título do produto na hora da compra (o histórico não muda se renomearem o produto)
+  quantity     Int
+  priceUnit    Decimal @db.Decimal(10, 2)
 
   @@map("order_items")
 }
@@ -117,7 +119,7 @@ model LeadQuote {
   stlFileUrl  String
   notes       String?
   status      LeadStatus @default(NEW)
-  estimatedPrice Float?
+  estimatedPrice Decimal? @db.Decimal(10, 2)
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
