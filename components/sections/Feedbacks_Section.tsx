@@ -3,7 +3,7 @@ import { Users, Star, Quote } from 'lucide-react'
 export default function Feedbacks_Section() {
   return (
     <section data-reveal className="py-20 bg-[#04060d] border-t border-cyan-950">
-      <div className="max-w-6xl mx-auto px-6 space-y-12">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 space-y-12">
         
         {/* Cabeçalho */}
         <div className="text-center space-y-3 max-w-xl mx-auto">

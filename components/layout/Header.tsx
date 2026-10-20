@@ -21,7 +21,7 @@ interface HeaderProps {
 export default function Header({ user = null, logoHref = '/', children, actions }: HeaderProps) {
   return (
     <header className="border-b border-cyan-950/40 bg-[#050811]/90 backdrop-blur-md sticky top-0 z-50">
-      <div className="max-w-6xl mx-auto px-6 max-[360px]:px-4 h-20 [@media(max-height:500px)]:h-16 flex items-center justify-between">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 h-20 [@media(max-height:500px)]:h-16 flex items-center justify-between">
         
         {/* Logo */}
         <Link href={logoHref} className="hover-btn-bounce inline-flex items-center gap-3">

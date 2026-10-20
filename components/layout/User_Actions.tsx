@@ -30,10 +30,11 @@ export default function User_Actions({ user }: UserActionsProps) {
           </Link>
         )}
 
-        <Link
-          href="/profile"
-          className="hover-btn-bounce flex items-center gap-2 p-1.5 rounded-full bg-cyan-950/40 border border-cyan-800/40 hover:border-cyan-400/60 transition-all duration-300 group"
-          title="Acessar minha conta"
+        {/* TODO(auth): voltar a apontar para /profile quando a rota existir */}
+        <span
+          className="flex items-center gap-2 p-1.5 rounded-full bg-cyan-950/40 border border-cyan-800/40 transition-all duration-300 group"
+          title="Minha conta (em breve)"
+          aria-disabled="true"
         >
           <div className="w-8 h-8 rounded-full bg-cyan-500/20 border border-cyan-400/30 flex items-center justify-center text-cyan-300 overflow-hidden font-bold text-xs">
             {user.avatarUrl ? (
@@ -45,25 +46,27 @@ export default function User_Actions({ user }: UserActionsProps) {
           <span className="text-xs font-semibold text-slate-200 pr-2 hidden lg:inline group-hover:text-cyan-300 transition-colors duration-300">
             {user.name}
           </span>
-        </Link>
+        </span>
       </div>
     )
   }
 
+  // TODO(auth): trocar por <Link href="/login"> e <Link href="/register">
+  // quando as rotas existirem. Enquanto isso, ficam só como indicativo visual.
   return (
     <div className="flex items-center gap-2">
-      <Link
-        href="/login"
-        className="hover-btn-bounce hidden min-[400px]:block text-xs font-semibold px-3.5 py-2 text-slate-300 hover:text-cyan-400 transition-all duration-300"
+      <span
+        className="hidden min-[400px]:block text-xs font-semibold px-3.5 py-2 text-slate-500 cursor-default"
+        title="Login em breve"
       >
         Entrar
-      </Link>
-      <Link
-        href="/register"
-        className="btn-fx hover-btn-bounce text-xs font-bold px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-950 rounded-lg transition-all duration-300 shadow-md shadow-cyan-500/10"
+      </span>
+      <span
+        className="text-xs font-bold px-4 py-2 bg-cyan-950/60 border border-cyan-800/50 text-cyan-500/70 rounded-lg cursor-default"
+        title="Cadastro em breve"
       >
         Cadastrar
-      </Link>
+      </span>
     </div>
   )
 }

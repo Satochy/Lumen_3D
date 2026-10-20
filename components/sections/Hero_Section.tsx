@@ -6,7 +6,7 @@ export default function Hero_Section() {
     <section id="hero" data-reveal className="py-12 md:py-20 relative overflow-hidden">
       <div className="absolute top-0 right-1/4 w-96 h-96 bg-cyan-500/10 blur-[120px] pointer-events-none rounded-full" />
 
-      <div className="max-w-5xl mx-auto px-6">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6">
         <div className="relative bg-[#0a0e1a]/80 border border-cyan-950/60 rounded-3xl p-8 max-[380px]:p-6 md:p-12 backdrop-blur-xl">
           
           <div className="absolute top-4 left-4 w-6 h-6 max-[380px]:top-2 max-[380px]:left-2 max-[380px]:w-4 max-[380px]:h-4 border-t-2 border-l-2 border-cyan-500/80" />

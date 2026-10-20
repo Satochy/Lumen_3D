@@ -13,8 +13,9 @@ export default function Cart_Button() {
     <>
       <button
         onClick={() => setIsOpen(true)}
-        className="relative p-2.5 text-slate-300 hover:text-cyan-400 bg-slate-900/80 border border-slate-800 hover:border-cyan-500/40 rounded-xl transition flex items-center justify-center"
+        className="relative w-11 h-11 text-slate-300 hover:text-cyan-400 bg-slate-900/80 border border-slate-800 hover:border-cyan-500/40 rounded-xl transition flex items-center justify-center"
         title="Ver Carrinho"
+        aria-label="Ver Carrinho"
       >
         <ShoppingBag className="w-5 h-5" />
         

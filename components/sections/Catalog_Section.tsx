@@ -1,8 +1,7 @@
-'use client'
-
 import Link from 'next/link'
 import { Box, ChevronRight } from 'lucide-react'
 import { AddToCartButton } from '@/components/cart/Add_To_Cart_Button'
+import { formatCurrency } from '@/lib/format_currency'
 
 interface Product {
   id: string
@@ -17,12 +16,11 @@ interface Product {
 
 interface CatalogSectionProps {
   products: Product[]
-  mainWhatsapp?: string
 }
 
 export default function Catalog_Section({ products }: CatalogSectionProps) {
   return (
-    <section data-reveal id="catalogo" className="py-16 max-w-6xl mx-auto px-6 w-full space-y-8">
+    <section data-reveal id="catalogo" className="py-16 max-w-6xl mx-auto px-4 sm:px-6 w-full space-y-8">
       {/* Cabeçalho da Seção */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-cyan-950 pb-6">
         <div>
@@ -46,13 +44,12 @@ export default function Catalog_Section({ products }: CatalogSectionProps) {
               const targetRoute = `/marketplace/${product.slug || product.id}`
 
               return (
-                /* Card do Produto como Link para a página de detalhes */
-                <Link
+                /* Card do Produto: <Link> no título com área expandida (HTML válido) */
+                <div
                   key={product.id}
-                  href={targetRoute}
                   data-reveal
                   data-reveal-delay={(index % 3) * 120}
-                  className="hover-btn-bounce bg-[#0a0e1a] border border-cyan-950 hover:border-cyan-500/50 hover:bg-[#0d1325] hover:shadow-lg hover:shadow-cyan-500/10 rounded-2xl p-5 flex flex-col justify-between transition-all duration-300 group cursor-pointer block"
+                  className="relative hover-btn-bounce bg-[#0a0e1a] border border-cyan-950 hover:border-cyan-500/50 hover:bg-[#0d1325] hover:shadow-lg hover:shadow-cyan-500/10 rounded-2xl p-5 flex flex-col justify-between transition-all duration-300 group"
                 >
                   <div className="space-y-4">
                     {/* Imagem do Produto ou Placeholder */}
@@ -72,7 +69,12 @@ export default function Catalog_Section({ products }: CatalogSectionProps) {
                         {product.category || 'Geral'}
                       </span>
                       <h3 className="font-bold text-lg text-white mt-2 group-hover:text-cyan-300 transition-colors duration-300 break-words line-clamp-1">
-                        {product.title}
+                        <Link
+                          href={targetRoute}
+                          className="after:absolute after:inset-0 after:content-[''] focus-visible:outline-none"
+                        >
+                          {product.title}
+                        </Link>
                       </h3>
                       <p className="text-xs text-slate-400 line-clamp-2 mt-1">
                         {product.description || 'Peça impressa em 3D com alta precisão e acabamento exclusivo.'}
@@ -85,16 +87,16 @@ export default function Catalog_Section({ products }: CatalogSectionProps) {
                     <div>
                       <span className="text-[10px] text-slate-500 block">Valor</span>
                       <span className="text-xl font-extrabold text-cyan-400">
-                        R$ {product.price.toFixed(2)}
+                        {formatCurrency(product.price)}
                       </span>
                     </div>
 
                     {/* Botão Encomendar / Adicionar ao Carrinho */}
-                    <div onClick={(e) => e.stopPropagation()}>
+                    <div className="relative z-10">
                       <AddToCartButton product={product} />
                     </div>
                   </div>
-                </Link>
+                </div>
               )
             })}
           </div>

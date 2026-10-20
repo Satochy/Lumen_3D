@@ -169,7 +169,7 @@ export default function Region_Map({ className = '' }: RegionMapProps) {
                   }`}
                 >
                   {isArrayName ? (
-                    city.name.map((line, index) => (
+                    (Array.isArray(city.name) ? city.name : [city.name]).map((line, index) => (
                       <tspan key={index} x={city.x + (city.dx || 0)} dy={index === 0 ? 0 : '1.2em'}>
                         {line}
                       </tspan>

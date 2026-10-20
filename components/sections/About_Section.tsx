@@ -1,9 +1,10 @@
 import { Target, Share2, Send, Mail, ArrowUpRight } from 'lucide-react'
+import { siteConfig } from '@/lib/config'
 
 export default function About_Section() {
   return (
     <section data-reveal id="sobre" className="py-20 bg-[#050811]">
-      <div className="max-w-6xl mx-auto px-6">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6">
         <div className="grid lg:grid-cols-12 gap-12 items-center">
           
           <div className="lg:col-span-7 space-y-6">
@@ -64,7 +65,7 @@ export default function About_Section() {
               {/* Botões/Links de contato com Bounce leve (Estilo Botão) */}
               <div className="space-y-3">
                 <a
-                  href="https://instagram.com/lumen.3d_"
+                  href={siteConfig.instagram.url}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="hover-btn-bounce p-3.5 rounded-xl bg-cyan-950/30 border border-cyan-900/50 hover:border-cyan-400/60 flex items-center justify-between transition-all duration-300 group contact-link"
@@ -75,14 +76,14 @@ export default function About_Section() {
                     </div>
                     <div>
                       <span className="text-xs font-bold text-white block">Instagram Oficial</span>
-                      <span className="text-[10px] text-slate-400">@lumen.3d_</span>
+                      <span className="text-[10px] text-slate-400">{siteConfig.instagram.handle}</span>
                     </div>
                   </div>
                   <ArrowUpRight className="w-4 h-4 text-slate-500 group-hover:text-cyan-400 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition" />
                 </a>
 
                 <a
-                  href="https://wa.me/5515988324925"
+                  href={`https://wa.me/${siteConfig.whatsapp.atendimento.number}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="hover-btn-bounce p-3.5 rounded-xl bg-cyan-950/30 border border-cyan-900/50 hover:border-cyan-400/60 flex items-center justify-between transition-all duration-300 group contact-link"
@@ -93,14 +94,14 @@ export default function About_Section() {
                     </div>
                     <div>
                       <span className="text-xs font-bold text-white block">Atendimento Direct / Whats</span>
-                      <span className="text-[10px] text-slate-400">(15) 98832-4925</span>
+                      <span className="text-[10px] text-slate-400">{siteConfig.whatsapp.atendimento.display}</span>
                     </div>
                   </div>
                   <ArrowUpRight className="w-4 h-4 text-slate-500 group-hover:text-cyan-400 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition" />
                 </a>
 
                 <a
-                  href="mailto:lumenimpressao3d@gmail.com"
+                  href={`mailto:${siteConfig.email}`}
                   className="hover-btn-bounce p-3.5 rounded-xl bg-cyan-950/30 border border-cyan-900/50 hover:border-cyan-400/60 flex items-center justify-between transition-all duration-300 group contact-link"
                 >
                   <div className="flex items-center gap-3">
@@ -109,7 +110,7 @@ export default function About_Section() {
                     </div>
                     <div>
                       <span className="text-xs font-bold text-white block">E-mail Comercial</span>
-                      <span className="text-[10px] text-slate-400">lumenimpressao3d@gmail.com</span>
+                      <span className="text-[10px] text-slate-400">{siteConfig.email}</span>
                     </div>
                   </div>
                   <ArrowUpRight className="w-4 h-4 text-slate-500 group-hover:text-cyan-400 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition" />

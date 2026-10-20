@@ -1,5 +1,6 @@
 import type { OrderStatus } from '@prisma/client'
 import { getOrders, updateOrderStatus } from '@/app/actions/orders'
+import { formatCurrency } from '@/lib/format_currency'
 
 // A ordem das chaves define a ordem das opções do <select>.
 // Tipar com Record<OrderStatus, ...> faz o TypeScript acusar se o enum do
@@ -99,7 +100,7 @@ export default async function OrdersPage() {
                         </div>
                         {/* priceUnit = preço da época da compra (não muda se o produto for reajustado) */}
                         <span className="text-xs text-slate-400">
-                          Preço Unit.: R$ {item.priceUnit.toFixed(2)}
+                          Preço Unit.: {formatCurrency(item.priceUnit.toNumber())}
                         </span>
                       </li>
                     ))}

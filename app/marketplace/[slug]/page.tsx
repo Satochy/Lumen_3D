@@ -4,6 +4,7 @@ import Cart_Button from '@/components/cart/Cart_Button'
 import { notFound } from 'next/navigation'
 import { AddToCartButton } from '@/components/cart/Add_To_Cart_Button'
 import { serializeProduct, type PublicProduct } from '@/lib/product_helpers'
+import { formatCurrency } from '@/lib/format_currency'
 
 async function getCurrentUser() {
   return {
@@ -51,7 +52,7 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
         <nav className="hidden md:flex items-center gap-6 text-xs font-semibold text-slate-300"></nav>
       </Header>
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-12">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-12">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
           
           {/* Galeria / Imagem do Produto */}
@@ -89,7 +90,7 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
               <div className="mt-4">
                 <span className="text-xs text-slate-500 uppercase font-medium block">Preço</span>
                 <span className="text-3xl font-black text-cyan-400">
-                  R$ {product.price.toFixed(2)}
+                  {formatCurrency(product.price)}
                 </span>
               </div>
 

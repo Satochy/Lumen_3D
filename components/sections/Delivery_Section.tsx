@@ -2,10 +2,10 @@
 
 import RegionMap from './Region_Map';
 import { Truck, CheckCircle2, Compass, MapPin } from 'lucide-react';
+import { siteConfig, whatsappDeliveryMessage } from '@/lib/config';
 
 export default function Delivery_Section() {
-  const whatsappMsg = encodeURIComponent('Olá! Gostaria de confirmar a entrega grátis para o meu endereço em Itapetininga/região.');
-  const whatsappUrl = `https://wa.me/5515988324925?text=${whatsappMsg}`;
+  const whatsappUrl = `https://wa.me/${siteConfig.whatsapp.atendimento.number}?text=${encodeURIComponent(whatsappDeliveryMessage)}`;
 
   return (
     <section data-reveal className="py-16 md:py-20 border-t border-cyan-950/80 bg-[#060913] relative overflow-hidden">

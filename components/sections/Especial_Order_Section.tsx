@@ -1,9 +1,10 @@
 import { Send, Mail } from 'lucide-react'
+import { siteConfig, whatsappQuoteMessage } from '@/lib/config'
 
 export default function Especial_Order_Section() {
   return (
     <section data-reveal id="orcamento" className="py-16 bg-[#03050c] border-t border-cyan-950">
-      <div className="max-w-4xl mx-auto px-6">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6">
         <div className="bg-[#0a0e1a] border border-cyan-950 rounded-3xl p-8 max-[380px]:p-5 md:p-12 space-y-8 relative overflow-hidden">
           
           {/* Cabeçalho */}
@@ -18,7 +19,7 @@ export default function Especial_Order_Section() {
           {/* Botões de Contato com Bounce Leve (Estilo Botão) */}
           <div className="grid md:grid-cols-2 gap-4 pt-2">
             <a
-              href={`https://wa.me/5515988324925?text=${encodeURIComponent('Olá! Gostaria de fazer um orçamento de impressão 3D na Lúmen.')}`}
+              href={`https://wa.me/${siteConfig.whatsapp.atendimento.number}?text=${encodeURIComponent(whatsappQuoteMessage)}`}
               target="_blank"
               rel="noopener noreferrer"
               data-reveal 
@@ -30,12 +31,12 @@ export default function Especial_Order_Section() {
               </div>
               <div>
                 <span className="text-xs text-slate-400 block">WhatsApp Atendimento</span>
-                <span className="text-sm font-bold text-white">(15) 98832-4925</span>
+                <span className="text-sm font-bold text-white">{siteConfig.whatsapp.atendimento.display}</span>
               </div>
             </a>
 
             <a
-              href={`https://wa.me/5515981159636?text=${encodeURIComponent('Olá! Gostaria de fazer um orçamento de impressão 3D na Lúmen.')}`}
+              href={`https://wa.me/${siteConfig.whatsapp.comercial.number}?text=${encodeURIComponent(whatsappQuoteMessage)}`}
               target="_blank"
               rel="noopener noreferrer"
               data-reveal 
@@ -47,7 +48,7 @@ export default function Especial_Order_Section() {
               </div>
               <div>
                 <span className="text-xs text-slate-400 block">WhatsApp Comercial</span>
-                <span className="text-sm font-bold text-white">(15) 98115-9636</span>
+                <span className="text-sm font-bold text-white">{siteConfig.whatsapp.comercial.display}</span>
               </div>
             </a>
           </div>
@@ -55,11 +56,11 @@ export default function Especial_Order_Section() {
           {/* Rodapé / Link de E-mail */}
           <div className="flex flex-col sm:flex-row items-center justify-center gap-6 pt-4 border-t border-cyan-950 text-xs text-slate-400">
             <a 
-              href="mailto:lumenimpressao3d@gmail.com" 
+              href={`mailto:${siteConfig.email}`} 
               className="hover-btn-bounce flex items-center gap-2 px-3 py-1.5 rounded-lg hover:text-cyan-400 transition-all duration-300"
             >
               <Mail className="w-4 h-4 text-cyan-400" />
-              <span>lumenimpressao3d@gmail.com</span>
+              <span>{siteConfig.email}</span>
             </a>
           </div>
         </div>

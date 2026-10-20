@@ -35,7 +35,7 @@ export default async function MarketplacePage() {
         </nav>
       </Header>
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-12 space-y-8">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-12 space-y-8">
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-slate-800/80 pb-6">
           <div>
             <h1 className="text-3xl font-extrabold tracking-tight text-white">Marketplace</h1>

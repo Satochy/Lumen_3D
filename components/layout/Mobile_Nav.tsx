@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { Menu, X, Shield } from 'lucide-react'
+import { siteConfig } from '@/lib/config'
 
 type Props = { isAdmin: boolean; isGuest: boolean }
 
@@ -34,7 +35,7 @@ export default function Mobile_Nav({ isAdmin, isGuest }: Props) {
         aria-label={open ? 'Fechar menu' : 'Abrir menu'}
         aria-expanded={open}
         aria-controls="mobile-nav"
-        className="w-10 h-10 flex items-center justify-center rounded-lg bg-cyan-950/40 border border-cyan-800/40 text-cyan-300 hover:border-cyan-400/60 active:scale-95 transition"
+        className="w-11 h-11 flex items-center justify-center rounded-lg bg-cyan-950/40 border border-cyan-800/40 text-cyan-300 hover:border-cyan-400/60 active:scale-95 transition"
       >
         {open ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
       </button>
@@ -53,7 +54,7 @@ export default function Mobile_Nav({ isAdmin, isGuest }: Props) {
         <Link href="/marketplace" onClick={close} className={`${linkCls} !text-cyan-400 font-bold`}>Marketplace</Link>
         <a href="#orcamento" onClick={close} className={linkCls}>Orçamentos</a>
         <a
-          href="https://instagram.com/lumen.3d_"
+          href={siteConfig.instagram.url}
           target="_blank"
           rel="noopener noreferrer"
           onClick={close}
@@ -69,7 +70,9 @@ export default function Mobile_Nav({ isAdmin, isGuest }: Props) {
           </Link>
         )}
         {isGuest && (
-          <Link href="/login" onClick={close} className={`${linkCls} min-[400px]:hidden`}>Entrar</Link>
+          <span className={`${linkCls} min-[400px]:hidden cursor-default text-slate-500`} title="Login em breve">
+            Entrar
+          </span>
         )}
       </nav>
     </div>

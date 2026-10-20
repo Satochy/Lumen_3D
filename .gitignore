@@ -43,6 +43,7 @@ yarn-error.log*
 next-env.d.ts
 
 # ia agents 
+/CLAUDE.md
 .claude/
 
 # editor configs (opcional: ignora configurações locais do VS Code, mantendo apenas extensões recomendadas se houver)

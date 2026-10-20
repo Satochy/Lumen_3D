@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { siteConfig } from '@/lib/config'
 
 export default function Navbar() {
   return (
@@ -8,7 +9,7 @@ export default function Navbar() {
         Marketplace
       </Link>
       <a href="#orcamento" className="nav-link hover:text-cyan-400 transition">Orçamentos</a>
-      <a href="https://instagram.com/lumen.3d_" target="_blank" rel="noopener noreferrer" className="nav-link hover:text-cyan-400 transition">Instagram</a>
+      <a href={siteConfig.instagram.url} target="_blank" rel="noopener noreferrer" className="nav-link hover:text-cyan-400 transition">Instagram</a>
     </nav>
   )
 }

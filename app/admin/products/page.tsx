@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { prisma } from '@/lib/prisma'
+import { formatCurrency } from '@/lib/format_currency'
 import {
   createProductAction,
   deleteProductAction,
@@ -63,7 +64,7 @@ export default async function AdminProductsPage() {
                           </span>
                         )}
                       </td>
-                      <td className="p-3">R$ {product.price.toFixed(2)}</td>
+                      <td className="p-3">{formatCurrency(product.price.toNumber())}</td>
                       <td className="p-3">
                         <span className={`px-2 py-0.5 rounded text-[11px] ${product.stock > 0 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'}`}>
                           {product.stock} un

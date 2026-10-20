@@ -3,6 +3,7 @@
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { useCart } from '@/context/Cart_Context'
+import { formatCurrency } from '@/lib/format_currency'
 
 interface ProductProps {
   id: string
@@ -48,7 +49,7 @@ export default function Product_Card({ product }: { product: ProductProps }) {
 
         <div className="flex items-center justify-between pt-2 border-t border-slate-800/80">
           <span className="text-base font-black text-cyan-400">
-            R$ {product.price.toFixed(2)}
+            {formatCurrency(product.price)}
           </span>
 
           <button
@@ -63,7 +64,7 @@ export default function Product_Card({ product }: { product: ProductProps }) {
                 stock: product.stock,
               })
             }}
-            className="px-3 py-1.5 bg-cyan-500 text-slate-950 font-bold text-xs rounded-lg hover:bg-cyan-400 active:scale-95 transition"
+            className="px-3 py-2 min-h-10 bg-cyan-500 text-slate-950 font-bold text-xs rounded-lg hover:bg-cyan-400 active:scale-95 transition"
           >
             + Carrinho
           </button>
