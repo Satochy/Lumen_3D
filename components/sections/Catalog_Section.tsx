@@ -12,6 +12,8 @@ interface Product {
   category: string | null
   images?: string[]
   stock?: number
+  weightGrams?: number | null
+  dimensions?: string | null
 }
 
 interface CatalogSectionProps {

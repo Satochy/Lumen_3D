@@ -13,6 +13,8 @@ interface ProductProps {
   images: string[]
   category: string
   stock?: number
+  weightGrams?: number | null
+  dimensions?: string | null
 }
 
 export default function Product_Card({ product }: { product: ProductProps }) {
@@ -62,6 +64,8 @@ export default function Product_Card({ product }: { product: ProductProps }) {
                 price: product.price,
                 image: mainImage,
                 stock: product.stock,
+                weightGrams: product.weightGrams,
+                dimensions: product.dimensions,
               })
             }}
             className="px-3 py-2 min-h-10 bg-cyan-500 text-slate-950 font-bold text-xs rounded-lg hover:bg-cyan-400 active:scale-95 transition"

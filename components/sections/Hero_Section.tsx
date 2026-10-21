@@ -54,7 +54,7 @@ export default function Hero_Section() {
                   href="#orcamento"
                   className="btn-soft hover-btn-bounce text-center px-6 py-3 bg-cyan-950/60 hover:bg-cyan-900/60 border border-cyan-800/50 text-cyan-300 font-semibold text-xs rounded-xl transition"
                 >
-                  Cotar Peça Personalizada
+                  Orçar Peça Personalizada
                 </a>
               </div>
             </div>

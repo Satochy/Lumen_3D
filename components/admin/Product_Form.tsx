@@ -12,8 +12,8 @@ export interface ProductFormDefaults {
   category: string
   price: number
   stock: number
-  weightGrams: number | null
-  dimensions: string | null
+  weightGrams: number
+  dimensions: string
   images: string[]
   isFeatured: boolean
 }

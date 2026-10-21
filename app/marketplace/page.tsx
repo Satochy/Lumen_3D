@@ -1,18 +1,9 @@
 import { Header, Footer } from '@/components/layout'
 import { prisma } from '@/lib/prisma'
 import Cart_Button from '@/components/cart/Cart_Button'
-import Product_Card from '@/components/marketplace/Product_Card' // Importando o card oficial
+import Product_Card from '@/components/marketplace/Product_Card'
 import { activeProducts, serializeProduct, type PublicProduct } from '@/lib/product_helpers'
-
-async function getCurrentUser() {
-  return {
-    id: '1',
-    name: 'Satochy',
-    email: 'satochy@lumen3d.com',
-    role: 'ADMIN',
-    avatarUrl: null,
-  }
-}
+import { getCurrentUser } from '@/lib/auth'
 
 export default async function MarketplacePage() {
   const user = await getCurrentUser()

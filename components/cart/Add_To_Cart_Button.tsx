@@ -9,6 +9,8 @@ interface AddToCartProduct {
   price: number
   images?: string[]
   stock?: number
+  weightGrams?: number | null
+  dimensions?: string | null
 }
 
 export function AddToCartButton({ product }: { product: AddToCartProduct }) {
@@ -23,6 +25,8 @@ export function AddToCartButton({ product }: { product: AddToCartProduct }) {
       image: product.images?.[0] || '',
       slug: product.slug,
       stock: product.stock,
+      weightGrams: product.weightGrams,
+      dimensions: product.dimensions,
     })
   }
 

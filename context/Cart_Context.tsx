@@ -10,6 +10,10 @@ export interface CartItem {
   image: string
   quantity: number
   stock?: number
+  /** Peso unitário em gramas, usado no cálculo de frete */
+  weightGrams?: number | null
+  /** Dimensões unitárias (ex.: "10x10x20 cm"), usadas no cálculo de frete */
+  dimensions?: string | null
 }
 
 interface CartContextType {

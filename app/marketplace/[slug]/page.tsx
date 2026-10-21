@@ -5,16 +5,7 @@ import { notFound } from 'next/navigation'
 import { AddToCartButton } from '@/components/cart/Add_To_Cart_Button'
 import { serializeProduct, type PublicProduct } from '@/lib/product_helpers'
 import { formatCurrency } from '@/lib/format_currency'
-
-async function getCurrentUser() {
-  return {
-    id: '1',
-    name: 'Satochy',
-    email: 'satochy@lumen3d.com',
-    role: 'ADMIN',
-    avatarUrl: null,
-  }
-}
+import { getCurrentUser } from '@/lib/auth'
 
 interface ProductDetailPageProps {
   params: Promise<{

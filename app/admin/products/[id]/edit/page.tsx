@@ -15,9 +15,12 @@ export default async function EditProductPage({ params }: EditProductPageProps) 
   if (!rawProduct) notFound()
 
   // Converte o Decimal do Prisma para number para o Client Component aceitar
+  // Valores nullable são convertidos para default (0 para number, '' para string)
   const product = {
     ...rawProduct,
     price: Number(rawProduct.price),
+    weightGrams: rawProduct.weightGrams ?? 0,
+    dimensions: rawProduct.dimensions ?? '',
   }
 
   return (
