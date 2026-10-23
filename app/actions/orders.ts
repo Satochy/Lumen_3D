@@ -1,14 +1,9 @@
 'use server'
 
 import { prisma } from '@/lib/prisma'
-import { OrderStatus } from '@prisma/client'
+// Certifique-se de que PaymentStatus e LogisticsStatus existem no seu schema.prisma
+import { PaymentStatus, LogisticsStatus } from '@prisma/client'
 import { revalidatePath } from 'next/cache'
-
-const ORDER_STATUSES: string[] = Object.values(OrderStatus)
-
-function isOrderStatus(value: string): value is OrderStatus {
-  return ORDER_STATUSES.includes(value)
-}
 
 export async function getOrders() {
   try {
@@ -29,24 +24,42 @@ export async function getOrders() {
   }
 }
 
-export async function updateOrderStatus(formData: FormData): Promise<void> {
+export async function updateLogisticsStatus(formData: FormData): Promise<void> {
   const orderId = String(formData.get('orderId') ?? '')
-  const status = String(formData.get('status') ?? '')
+  const logisticsStatus = String(formData.get('logisticsStatus') ?? '') as LogisticsStatus
 
-  // O valor vem do navegador: só aceita o que existe no enum do schema.
-  if (!orderId || !isOrderStatus(status)) return
+  if (!orderId) return
 
   try {
     await prisma.order.update({
       where: { id: orderId },
-      data: { status },
+      data: { logisticsStatus },
     })
   } catch (error) {
-    // Pedido inexistente ou falha do banco: registra e não derruba a página.
-    console.error('Erro ao atualizar status do pedido:', orderId, error)
+    console.error('Erro ao atualizar status logístico:', orderId, error)
     return
   }
 
   revalidatePath('/admin/orders')
-  revalidatePath('/admin') // o painel conta pedidos pendentes
+  revalidatePath('/admin')
+}
+
+export async function updatePaymentStatus(formData: FormData): Promise<void> {
+  const orderId = String(formData.get('orderId') ?? '')
+  const paymentStatus = String(formData.get('paymentStatus') ?? '') as PaymentStatus
+
+  if (!orderId) return
+
+  try {
+    await prisma.order.update({
+      where: { id: orderId },
+      data: { paymentStatus },
+    })
+  } catch (error) {
+    console.error('Erro ao atualizar status de pagamento:', orderId, error)
+    return
+  }
+
+  revalidatePath('/admin/orders')
+  revalidatePath('/admin')
 }

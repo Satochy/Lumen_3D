@@ -58,7 +58,7 @@ export default function Product_Card({ product }: { product: ProductProps }) {
             onClick={(e) => {
               e.stopPropagation()
               addItem({
-                id: product.id,
+                productId: product.id,
                 title: product.title,
                 slug: product.slug,
                 price: product.price,

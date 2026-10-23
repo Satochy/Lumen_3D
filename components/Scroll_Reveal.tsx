@@ -13,8 +13,6 @@ export default function Scroll_Reveal() {
       return
     }
 
-    console.log('🚀 [Scroll_Reveal] A iniciar observador...')
-
     const observedElements = new Set<Element>()
 
     const io = new IntersectionObserver(

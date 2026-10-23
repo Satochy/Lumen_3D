@@ -119,7 +119,8 @@ export default function Cart_Drawer({ isOpen, onClose }: CartDrawerProps) {
     setOrderSuccess(null)
 
     const itemsForOrder = cart.map(item => ({
-      productId: item.id,
+      productId: item.productId,
+      variantId: item.variantId,
       productTitle: item.title,
       quantity: item.quantity,
       priceUnit: item.price,
@@ -154,15 +155,11 @@ export default function Cart_Drawer({ isOpen, onClose }: CartDrawerProps) {
       {/* Clique no fundo fecha a gaveta */}
       <div className="flex-1" onClick={onClose} />
 
-      {/* GAVETA PRINCIPAL (h-[100dvh] garante que oca a tela toda, sem colapsar) */}
+      {/* GAVETA PRINCIPAL */}
       <div className="w-full max-w-md bg-[#050811] border-l border-slate-800/80 p-4 sm:p-6 flex flex-col h-[100dvh] text-slate-100 shadow-2xl">
         
         {isShippingTabOpen ? (
-          /* ========================================================= */
-          /* VIEW 2: ABA DE CÁLCULO DE FRETE                           */
-          /* ========================================================= */
           <>
-            {/* TOPO: Aba de Frete (Fixo) */}
             <div className="flex items-center justify-between pb-4 border-b border-slate-800/80 shrink-0">
               <h2 className="text-base font-bold text-white flex items-center gap-2">
                 <button 
@@ -182,7 +179,6 @@ export default function Cart_Drawer({ isOpen, onClose }: CartDrawerProps) {
               </button>
             </div>
 
-            {/* MEIO: Formulário e Lista de Fretes (Scrollável) */}
             <div className="mt-6 flex-1 overflow-y-auto space-y-5 pr-2">
               <div className="space-y-2">
                 <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
@@ -254,7 +250,6 @@ export default function Cart_Drawer({ isOpen, onClose }: CartDrawerProps) {
               )}
             </div>
 
-            {/* RODAPÉ: Aba de Frete (Fixo) */}
             <div className="pt-4 border-t border-slate-800/80 shrink-0">
               <button
                 onClick={() => setIsShippingTabOpen(false)}
@@ -266,11 +261,7 @@ export default function Cart_Drawer({ isOpen, onClose }: CartDrawerProps) {
             </div>
           </>
         ) : (
-          /* ========================================================= */
-          /* VIEW 1: ABA PRINCIPAL DO CARRINHO                         */
-          /* ========================================================= */
           <>
-            {/* TOPO: Carrinho (Fixo) */}
             <div className="flex items-center justify-between pb-4 border-b border-slate-800/80 shrink-0">
               <h2 className="text-base font-bold text-white flex items-center gap-2">
                 <span>🛒</span> Seu Carrinho ({totalItems})
@@ -283,7 +274,6 @@ export default function Cart_Drawer({ isOpen, onClose }: CartDrawerProps) {
               </button>
             </div>
 
-            {/* MEIO: Lista de Produtos (Scrollável) */}
             <div className="mt-4 flex-1 overflow-y-auto space-y-3 pr-2">
               {cart.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-center space-y-3 opacity-60">
@@ -295,7 +285,7 @@ export default function Cart_Drawer({ isOpen, onClose }: CartDrawerProps) {
               ) : (
                 cart.map((item) => (
                   <div
-                    key={item.id}
+                    key={`${item.productId}-${item.variantId || 'base'}`}
                     className="flex items-center justify-between bg-slate-900/60 p-3 rounded-xl border border-slate-800/80 gap-3"
                   >
                     <div className="flex-1 min-w-0">
@@ -310,7 +300,7 @@ export default function Cart_Drawer({ isOpen, onClose }: CartDrawerProps) {
                     <div className="flex items-center gap-2 shrink-0">
                       <div className="flex items-center border border-slate-800 bg-slate-950 rounded-lg overflow-hidden">
                         <button
-                          onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                          onClick={() => updateQuantity(item.productId, item.variantId, item.quantity - 1)}
                           className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-white transition font-bold"
                         >
                           -
@@ -319,14 +309,14 @@ export default function Cart_Drawer({ isOpen, onClose }: CartDrawerProps) {
                           {item.quantity}
                         </span>
                         <button
-                          onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                          onClick={() => updateQuantity(item.productId, item.variantId, item.quantity + 1)}
                           className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-white transition font-bold"
                         >
                           +
                         </button>
                       </div>
                       <button
-                        onClick={() => removeItem(item.id)}
+                        onClick={() => removeItem(item.productId, item.variantId)}
                         className="text-[11px] text-red-400 hover:text-red-300 font-semibold px-2 py-2 transition"
                       >
                         Remover
@@ -337,7 +327,6 @@ export default function Cart_Drawer({ isOpen, onClose }: CartDrawerProps) {
               )}
             </div>
 
-            {/* RODAPÉ: Totais e Checkout (Fixo) */}
             <div className="pt-5 border-t border-slate-800/80 flex flex-col gap-4 shrink-0 mt-2">
               
               {orderError && <p className="text-xs text-red-400 text-center">{orderError}</p>}
@@ -347,7 +336,6 @@ export default function Cart_Drawer({ isOpen, onClose }: CartDrawerProps) {
                 </div>
               )}
 
-              {/* Tabela de Valores */}
               <div className="space-y-3 bg-slate-900/40 p-4 rounded-xl border border-slate-800/50">
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-slate-400 text-xs font-medium">Subtotal</span>
@@ -394,7 +382,6 @@ export default function Cart_Drawer({ isOpen, onClose }: CartDrawerProps) {
                 </div>
               </div>
 
-              {/* Ações */}
               <div className="flex gap-2">
                 <button
                   onClick={clearCart}

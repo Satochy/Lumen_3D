@@ -19,7 +19,7 @@ export function AddToCartButton({ product }: { product: AddToCartProduct }) {
 
   const handleAddToCart = () => {
     addItem({
-      id: product.id,
+      productId: product.id,
       title: product.title,
       price: product.price,
       image: product.images?.[0] || '',

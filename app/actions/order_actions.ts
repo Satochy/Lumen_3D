@@ -94,7 +94,6 @@ export async function createOrderAction(input: OrderInput): Promise<CreateOrderR
       const order = await tx.order.create({
         data: {
           userId: buyerId,
-          status: 'PENDING',
           totalAmount: new Prisma.Decimal(subtotal),
           shippingCost: new Prisma.Decimal(shippingCost),
         },
