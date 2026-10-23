@@ -13,8 +13,14 @@ enum Role {
   ADMIN
 }
 
-enum OrderStatus {
+enum PaymentStatus {
   PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum LogisticsStatus {
   PREPARING
   PRINTING
   POST_PROCESSING
@@ -32,18 +38,55 @@ enum LeadStatus {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  name      String
+  id        String    @id @default(uuid())
+  email     String    @unique
+  username  String    @unique
+  name      String?
+  birthDate DateTime?
   phone     String?
-  role      Role     @default(CLIENT)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  cpf       String?   @unique
+  role      Role      @default(CLIENT)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
-  orders    Order[]
-  questions Question[]
+  orders         Order[]
+  questions      Question[]
+  addresses      Address[]
+  paymentMethods PaymentMethod[]
 
   @@map("users")
+}
+
+model Address {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  street       String
+  number       String
+  complement   String?
+  neighborhood String
+  city         String
+  state        String
+  zipCode      String
+  isDefault    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("addresses")
+}
+
+model PaymentMethod {
+  id            String   @id @default(uuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type          String
+  providerToken String?
+  lastFour      String?
+  isDefault     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("payment_methods")
 }
 
 model Product {
@@ -55,43 +98,61 @@ model Product {
   stock       Int       @default(0)
   images      String[]
   category    String
-  dimensions  String?   // Ex: "15x10x10 cm"
+  dimensions  String?
   weightGrams Float?
   isFeatured  Boolean   @default(false)
-  archivedAt  DateTime? // null = ativo; preenchido = arquivado (sai da loja, histórico preservado)
+  archivedAt  DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
+  variants   Variant[]
   orderItems OrderItem[]
   questions  Question[]
 
   @@map("products")
 }
 
-model FilamentStock {
+model Variant {
   id            String   @id @default(uuid())
-  material      String   // PLA, ABS, PETG, Resin, etc.
-  color         String
-  hexColor      String?
-  spoolWeightKg Float    @default(1.0)
-  remainingGrams Float
-  minThresholdGrams Float @default(200)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  productId     String
+  product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sku           String?
+  stock         Int      @default(0)
+  priceOverride Decimal? @db.Decimal(10, 2)
+  attributes    Json
+
+  orderItems OrderItem[]
+
+  @@map("variants")
+}
+
+model FilamentStock {
+  id                String   @id @default(uuid())
+  material          String
+  color             String
+  hexColor          String?
+  spoolWeightKg     Float    @default(1.0)
+  remainingGrams    Float
+  minThresholdGrams Float    @default(200)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   @@map("filament_stocks")
 }
 
 model Order {
-  id            String      @id @default(uuid())
-  userId        String
-  user          User        @relation(fields: [userId], references: [id])
-  status        OrderStatus @default(PENDING)
-  totalAmount   Decimal     @db.Decimal(10, 2)
-  shippingCost  Decimal     @default(0) @db.Decimal(10, 2)
-  trackingCode  String?
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  id                      String          @id @default(uuid())
+  userId                  String
+  user                    User            @relation(fields: [userId], references: [id])
+  paymentStatus           PaymentStatus   @default(PENDING)
+  logisticsStatus         LogisticsStatus @default(PREPARING)
+  totalAmount             Decimal         @db.Decimal(10, 2)
+  shippingCost            Decimal         @default(0.00) @db.Decimal(10, 2)
+  shippingAddressSnapshot Json?
+  trackingCode            String?
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
+  isLocalDelivery Boolean @default(false)
 
   items OrderItem[]
 
@@ -99,29 +160,31 @@ model Order {
 }
 
 model OrderItem {
-  id           String  @id @default(uuid())
+  id           String   @id @default(uuid())
   orderId      String
-  order        Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   productId    String
-  product      Product @relation(fields: [productId], references: [id])
-  productTitle String  // título do produto na hora da compra (o histórico não muda se renomearem o produto)
+  product      Product  @relation(fields: [productId], references: [id])
+  productTitle String
   quantity     Int
-  priceUnit    Decimal @db.Decimal(10, 2)
+  priceUnit    Decimal  @db.Decimal(10, 2)
+  variantId    String?
+  variant      Variant? @relation(fields: [variantId], references: [id])
 
   @@map("order_items")
 }
 
 model LeadQuote {
-  id          String     @id @default(uuid())
-  clientName  String
-  clientEmail String
-  clientPhone String
-  stlFileUrl  String
-  notes       String?
-  status      LeadStatus @default(NEW)
-  estimatedPrice Decimal? @db.Decimal(10, 2)
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  id             String     @id @default(uuid())
+  clientName     String
+  clientEmail    String
+  clientPhone    String
+  stlFileUrl     String
+  notes          String?
+  status         LeadStatus @default(NEW)
+  estimatedPrice Decimal?   @db.Decimal(10, 2)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
 
   @@map("lead_quotes")
 }
@@ -138,4 +201,13 @@ model Question {
   updatedAt DateTime @updatedAt
 
   @@map("questions")
+}
+
+model PaymentWebhookLog {
+  id        String   @id @default(uuid())
+  eventId   String   @unique
+  status    String
+  createdAt DateTime @default(now())
+
+  @@map("payment_webhook_logs")
 }
