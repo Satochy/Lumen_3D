@@ -11,37 +11,48 @@ export interface CartItem {
   image: string
   quantity: number
   stock?: number
-  /** Peso unitário em gramas, usado no cálculo de frete */
   weightGrams?: number | null
-  /** Dimensões unitárias (ex.: "10x10x20 cm"), usadas no cálculo de frete */
   dimensions?: string | null
-  /** Atributos da variante selecionada, ex: { color: "red", size: "xl" } */
   attributes?: Record<string, string>
+}
+
+// Estrutura para salvar a opção de frete escolhida
+export interface ShippingState {
+  serviceId: string
+  serviceName: string
+  price: number
+  isFree?: boolean
+  cep: string
 }
 
 interface CartContextType {
   cart: CartItem[]
+  shipping: ShippingState | null
   addItem: (product: Omit<CartItem, 'quantity'> & { quantity?: number }) => void
   removeItem: (productId: string, variantId?: string) => void
   updateQuantity: (productId: string, variantId: string | undefined, quantity: number) => void
   clearCart: () => void
+  setShipping: (shipping: ShippingState | null) => void
   totalAmount: number
   totalItems: number
+  finalTotal: number // Subtotal + Frete
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined)
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [cart, setCart] = useState<CartItem[]>([])
+  const [shipping, setShippingState] = useState<ShippingState | null>(null)
   const [isHydrated, setIsHydrated] = useState(false)
 
-  // 1. Carrega o carrinho salvo no browser ao inicializar
+  // 1. Carrega o carrinho e o frete salvos no browser
   useEffect(() => {
-    const saved = localStorage.getItem('lumen3d_cart')
-    if (saved) {
+    const savedCart = localStorage.getItem('lumen3d_cart')
+    const savedShipping = localStorage.getItem('lumen3d_shipping')
+    
+    if (savedCart) {
       try {
-        const parsedCart = JSON.parse(saved)
-        // Migração silenciosa caso existam itens legados no localStorage (apenas com 'id')
+        const parsedCart = JSON.parse(savedCart)
         const migratedCart = parsedCart.map((item: any) => ({
           ...item,
           productId: item.productId || item.id,
@@ -51,19 +62,38 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         console.error('Erro ao ler carrinho do localStorage:', e)
       }
     }
+
+    if (savedShipping) {
+      try {
+        setShippingState(JSON.parse(savedShipping))
+      } catch (e) {
+         console.error('Erro ao ler frete do localStorage:', e)
+      }
+    }
+
     setIsHydrated(true)
   }, [])
 
-  // 2. Persiste alterações no localStorage após a hidratação inicial
+  // 2. Persiste alterações no localStorage
   useEffect(() => {
     if (isHydrated) {
       localStorage.setItem('lumen3d_cart', JSON.stringify(cart))
+      if (shipping) {
+        localStorage.setItem('lumen3d_shipping', JSON.stringify(shipping))
+      } else {
+        localStorage.removeItem('lumen3d_shipping')
+      }
     }
-  }, [cart, isHydrated])
+  }, [cart, shipping, isHydrated])
 
-  // Lógica: Adicionar item separando corretamente por Produto + Variante
+  const setShipping = (newShipping: ShippingState | null) => {
+    setShippingState(newShipping)
+  }
+
   const addItem = (product: Omit<CartItem, 'quantity'> & { quantity?: number }) => {
     const qtyToAdd = product.quantity && product.quantity > 0 ? product.quantity : 1
+    // Sempre que adicionar um item novo, reseta o frete (pois peso e dimensões mudam)
+    setShippingState(null) 
 
     setCart((prevCart) => {
       const existingIndex = prevCart.findIndex(
@@ -86,15 +116,15 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     })
   }
 
-  // Lógica: Remover item exato (Produto + Variante)
   const removeItem = (productId: string, variantId?: string) => {
+    setShippingState(null) // Reseta o frete se os itens mudarem
     setCart((prevCart) => 
       prevCart.filter((item) => !(item.productId === productId && item.variantId === variantId))
     )
   }
 
-  // Lógica: Atualizar quantidade diretamente (remover se for <= 0)
   const updateQuantity = (productId: string, variantId: string | undefined, quantity: number) => {
+    setShippingState(null) // Reseta o frete se a quantidade mudar
     if (quantity <= 0) {
       removeItem(productId, variantId)
       return
@@ -111,22 +141,28 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     )
   }
 
-  const clearCart = () => setCart([])
+  const clearCart = () => {
+    setCart([])
+    setShippingState(null)
+  }
 
-  // Cálculos derivados dinâmicos
   const totalAmount = cart.reduce((acc, item) => acc + item.price * item.quantity, 0)
   const totalItems = cart.reduce((acc, item) => acc + item.quantity, 0)
+  const finalTotal = totalAmount + (shipping?.price || 0)
 
   return (
     <CartContext.Provider
       value={{
         cart,
+        shipping,
         addItem,
         removeItem,
         updateQuantity,
         clearCart,
+        setShipping,
         totalAmount,
         totalItems,
+        finalTotal
       }}
     >
       {children}

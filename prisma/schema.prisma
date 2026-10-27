@@ -42,6 +42,7 @@ model User {
   email     String    @unique
   username  String
   name      String
+  avatarUrl String?
   birthDate DateTime?
   phone     String?
   cpf       String?   @unique

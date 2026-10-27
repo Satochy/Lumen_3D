@@ -23,6 +23,10 @@ function parseCheckoutPayload(raw: unknown): { error?: string; data?: CheckoutIn
 export async function processCheckout(payload: unknown): Promise<CheckoutResult> {
   const user = await getCurrentUser()
 
+  if (!user) {
+    return { success: false, error: 'Você precisa estar logado para finalizar o pedido.' }
+  }
+
   const parsed = parseCheckoutPayload(payload)
   if (parsed.error || !parsed.data) {
     return { success: false, error: parsed.error }

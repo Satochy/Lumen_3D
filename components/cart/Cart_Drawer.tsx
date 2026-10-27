@@ -1,10 +1,11 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { useCart } from '@/context/Cart_Context'
 import { formatCurrency } from '@/lib/format_currency'
 import { calculateShippingAction } from '@/app/actions/shipping_actions'
-import { createOrderAction } from '@/app/actions/order_actions'
+import { getUserDefaultCepAction } from '@/app/actions/profile_actions'
 
 interface ShippingOption {
   serviceId: string
@@ -23,45 +24,105 @@ interface CartDrawerProps {
 }
 
 export default function Cart_Drawer({ isOpen, onClose }: CartDrawerProps) {
+  const router = useRouter()
   const {
     cart,
+    shipping, // Lê o frete global
+    setShipping, // Atualiza o frete global
     removeItem,
     updateQuantity,
     clearCart,
     totalAmount,
     totalItems,
+    finalTotal
   } = useCart()
 
-  // Controle de abas
   const [isShippingTabOpen, setIsShippingTabOpen] = useState(false)
-
-  // Estado do frete
-  const [cep, setCep] = useState('')
+  
+  // Inicia o CEP com o salvo no estado global, se houver
+  const [cep, setCep] = useState(shipping?.cep || '') 
   const [shippingOptions, setShippingOptions] = useState<ShippingOption[]>([])
-  const [selectedShippingId, setSelectedShippingId] = useState<string | null>(null)
+  
+  // O ID selecionado agora reflete o estado global
+  const [selectedShippingId, setSelectedShippingId] = useState<string | null>(shipping?.serviceId || null) 
   const [shippingLoading, setShippingLoading] = useState(false)
   const [shippingError, setShippingError] = useState<string | null>(null)
 
-  // Estado de criação de pedido
-  const [orderCreating, setOrderCreating] = useState(false)
-  const [orderError, setOrderError] = useState<string | null>(null)
-  const [orderSuccess, setOrderSuccess] = useState<string | null>(null)
-
-  // Resetar a aba de frete ao fechar a gaveta
+  // Dispara auto-cálculo SE o usuário logar e NÃO houver frete salvo no contexto
   useEffect(() => {
     if (!isOpen) {
       setIsShippingTabOpen(false)
+      return
     }
-  }, [isOpen])
+
+    let isMounted = true
+
+    async function initializeShipping() {
+      if (cart.length === 0 || shipping) return // Se já tem frete, não auto-calcula
+
+      let currentCep = cep
+      
+      if (!currentCep) {
+        const res = await getUserDefaultCepAction()
+        if (isMounted && res.success && res.data?.zipCode) {
+          currentCep = res.data.zipCode.replace(/\D/g, '').slice(0, 8)
+          if (currentCep.length === 8) {
+            setCep(currentCep)
+          }
+        }
+      }
+
+      if (currentCep.length === 8 && shippingOptions.length === 0 && isMounted) {
+        setShippingLoading(true)
+        setShippingError(null)
+
+        const shippingItems = cart.map((item) => ({
+          weightGrams: item.weightGrams ?? 200,
+          dimensions: item.dimensions ?? '15x10x5',
+          quantity: item.quantity,
+        }))
+
+        try {
+          const result = await calculateShippingAction(currentCep, shippingItems)
+          if (isMounted) {
+            if (result.error) {
+              setShippingError(result.error)
+              setShippingOptions([])
+            } else {
+              setShippingOptions(result.options)
+              if (result.options.length > 0) {
+                const freeOption = result.options.find((o: any) => o.isFree)
+                const optionToSelect = freeOption || result.options[0]
+                setSelectedShippingId(optionToSelect.serviceId)
+                
+                // Já salva automaticamente no Contexto Global
+                setShipping({
+                  serviceId: optionToSelect.serviceId,
+                  serviceName: optionToSelect.serviceName,
+                  price: optionToSelect.price,
+                  isFree: optionToSelect.isFree,
+                  cep: currentCep
+                })
+              }
+            }
+          }
+        } catch {
+          if (isMounted) setShippingError('Erro ao calcular frete automático')
+        } finally {
+          if (isMounted) setShippingLoading(false)
+        }
+      }
+    }
+
+    initializeShipping()
+
+    return () => {
+      isMounted = false
+    }
+  }, [isOpen, cart.length, shipping]) // Depende de shipping também
 
   if (!isOpen) return null
 
-  // Calcular total com frete
-  const selectedOption = shippingOptions.find(opt => opt.serviceId === selectedShippingId)
-  const shippingCost = selectedOption?.price || 0
-  const finalTotal = totalAmount + shippingCost
-
-  // Máscara de CEP em tempo real (ex: 18210-030)
   const handleCepChange = (value: string) => {
     const numbers = value.replace(/\D/g, '').slice(0, 8)
     setCep(numbers)
@@ -72,7 +133,6 @@ export default function Cart_Drawer({ isOpen, onClose }: CartDrawerProps) {
   const displayCep = cep.length > 5 ? `${cep.slice(0, 5)}-${cep.slice(5)}` : cep
   const isValidCEP = cep.length === 8
 
-  // Calcular frete
   const handleCalculateShipping = async () => {
     if (!isValidCEP) {
       setShippingError('CEP deve ter 8 dígitos')
@@ -81,9 +141,8 @@ export default function Cart_Drawer({ isOpen, onClose }: CartDrawerProps) {
 
     setShippingLoading(true)
     setShippingError(null)
-    setOrderError(null)
 
-    const shippingItems = cart.map(item => ({
+    const shippingItems = cart.map((item) => ({
       weightGrams: item.weightGrams ?? 200,
       dimensions: item.dimensions ?? '15x10x5',
       quantity: item.quantity,
@@ -94,10 +153,12 @@ export default function Cart_Drawer({ isOpen, onClose }: CartDrawerProps) {
       if (result.error) {
         setShippingError(result.error)
         setShippingOptions([])
+        setShipping(null) // Limpa global em caso de erro
       } else {
         setShippingOptions(result.options)
-        if (result.options.length > 0 && !selectedShippingId) {
-          setSelectedShippingId(result.options[0].serviceId)
+        if (result.options.length > 0) {
+           // Reseta a seleção visual, obrigando o cliente a confirmar
+           setSelectedShippingId(null)
         }
       }
     } catch {
@@ -106,63 +167,37 @@ export default function Cart_Drawer({ isOpen, onClose }: CartDrawerProps) {
       setShippingLoading(false)
     }
   }
+  
+  // Ao clicar em Confirmar Frete, salva no Contexto Global
+  const handleConfirmShipping = () => {
+     const selectedOption = shippingOptions.find(opt => opt.serviceId === selectedShippingId)
+     if(selectedOption) {
+        setShipping({
+            serviceId: selectedOption.serviceId,
+            serviceName: selectedOption.serviceName,
+            price: selectedOption.price,
+            isFree: selectedOption.isFree,
+            cep: cep
+        })
+     }
+     setIsShippingTabOpen(false)
+  }
 
-  // Criar pedido
-  const handleCreateOrder = async () => {
-    if (!selectedShippingId || !selectedOption) {
-      setOrderError('Selecione uma opção de frete.')
-      return
-    }
-
-    setOrderCreating(true)
-    setOrderError(null)
-    setOrderSuccess(null)
-
-    const itemsForOrder = cart.map(item => ({
-      productId: item.productId,
-      variantId: item.variantId,
-      productTitle: item.title,
-      quantity: item.quantity,
-      priceUnit: item.price,
-    }))
-
-    try {
-      const result = await createOrderAction({
-        items: itemsForOrder,
-        selectedShippingOption: selectedOption,
-        userId: undefined,
-      })
-
-      if (result.success) {
-        setOrderSuccess(`Pedido #${result.orderId?.slice(0, 8)} criado com sucesso!`)
-        clearCart()
-        setCep('')
-        setShippingOptions([])
-        setSelectedShippingId(null)
-      } else {
-        setOrderError(result.error || 'Erro ao criar pedido.')
-      }
-    } catch (error) {
-      console.error('Erro ao criar pedido:', error)
-      setOrderError('Erro de conexão. Tente novamente.')
-    } finally {
-      setOrderCreating(false)
-    }
+  const handleGoToCartPage = () => {
+    onClose()
+    router.push('/marketplace/cart')
   }
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/70 backdrop-blur-sm">
-      {/* Clique no fundo fecha a gaveta */}
       <div className="flex-1" onClick={onClose} />
 
-      {/* GAVETA PRINCIPAL */}
       <div className="w-full max-w-md bg-[#050811] border-l border-slate-800/80 p-4 sm:p-6 flex flex-col h-[100dvh] text-slate-100 shadow-2xl">
-        
         {isShippingTabOpen ? (
           <>
             <div className="flex items-center justify-between pb-4 border-b border-slate-800/80 shrink-0">
               <h2 className="text-base font-bold text-white flex items-center gap-2">
-                <button 
+                <button
                   onClick={() => setIsShippingTabOpen(false)}
                   className="mr-2 w-8 h-8 flex items-center justify-center rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-white transition"
                   aria-label="Voltar para o carrinho"
@@ -237,7 +272,8 @@ export default function Cart_Drawer({ isOpen, onClose }: CartDrawerProps) {
                             )}
                           </div>
                           <div className="text-[11px] text-slate-400 mt-0.5">
-                            {option.companyName} • Entrega em {option.deliveryTime} dia{option.deliveryTime !== 1 ? 's' : ''}
+                            {option.companyName} • Entrega em {option.deliveryTime} dia
+                            {option.deliveryTime !== 1 ? 's' : ''}
                           </div>
                         </div>
                       </div>
@@ -252,9 +288,9 @@ export default function Cart_Drawer({ isOpen, onClose }: CartDrawerProps) {
 
             <div className="pt-4 border-t border-slate-800/80 shrink-0">
               <button
-                onClick={() => setIsShippingTabOpen(false)}
+                onClick={handleConfirmShipping}
                 disabled={!selectedShippingId}
-                className="w-full py-3.5 bg-cyan-500 text-slate-950 font-bold rounded-xl text-sm hover:bg-cyan-400 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                className="w-full py-3.5 bg-cyan-500 text-slate-950 font-bold rounded-xl text-sm hover:bg-cyan-400 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
               >
                 Confirmar Frete e Voltar
               </button>
@@ -268,7 +304,7 @@ export default function Cart_Drawer({ isOpen, onClose }: CartDrawerProps) {
               </h2>
               <button
                 onClick={onClose}
-                className="w-10 h-10 flex items-center justify-center rounded-lg text-slate-400 hover:text-white text-sm font-bold transition"
+                className="w-10 h-10 flex items-center justify-center rounded-lg text-slate-400 hover:text-white text-sm font-bold transition cursor-pointer"
               >
                 ✕
               </button>
@@ -300,8 +336,10 @@ export default function Cart_Drawer({ isOpen, onClose }: CartDrawerProps) {
                     <div className="flex items-center gap-2 shrink-0">
                       <div className="flex items-center border border-slate-800 bg-slate-950 rounded-lg overflow-hidden">
                         <button
-                          onClick={() => updateQuantity(item.productId, item.variantId, item.quantity - 1)}
-                          className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-white transition font-bold"
+                          onClick={() =>
+                            updateQuantity(item.productId, item.variantId, item.quantity - 1)
+                          }
+                          className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-white transition font-bold cursor-pointer"
                         >
                           -
                         </button>
@@ -309,15 +347,17 @@ export default function Cart_Drawer({ isOpen, onClose }: CartDrawerProps) {
                           {item.quantity}
                         </span>
                         <button
-                          onClick={() => updateQuantity(item.productId, item.variantId, item.quantity + 1)}
-                          className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-white transition font-bold"
+                          onClick={() =>
+                            updateQuantity(item.productId, item.variantId, item.quantity + 1)
+                          }
+                          className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-white transition font-bold cursor-pointer"
                         >
                           +
                         </button>
                       </div>
                       <button
                         onClick={() => removeItem(item.productId, item.variantId)}
-                        className="text-[11px] text-red-400 hover:text-red-300 font-semibold px-2 py-2 transition"
+                        className="text-[11px] text-red-400 hover:text-red-300 font-semibold px-2 py-2 transition cursor-pointer"
                       >
                         Remover
                       </button>
@@ -328,14 +368,6 @@ export default function Cart_Drawer({ isOpen, onClose }: CartDrawerProps) {
             </div>
 
             <div className="pt-5 border-t border-slate-800/80 flex flex-col gap-4 shrink-0 mt-2">
-              
-              {orderError && <p className="text-xs text-red-400 text-center">{orderError}</p>}
-              {orderSuccess && (
-                <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
-                  <p className="text-xs text-emerald-400 font-semibold text-center">✅ {orderSuccess}</p>
-                </div>
-              )}
-
               <div className="space-y-3 bg-slate-900/40 p-4 rounded-xl border border-slate-800/50">
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-slate-400 text-xs font-medium">Subtotal</span>
@@ -346,28 +378,28 @@ export default function Cart_Drawer({ isOpen, onClose }: CartDrawerProps) {
 
                 <div className="flex justify-between items-center text-sm py-1">
                   <span className="text-slate-400 text-xs font-medium">Frete</span>
-                  
-                  {selectedOption ? (
+
+                  {shipping ? (
                     <div className="flex items-center gap-3">
                       <div className="text-right">
                         <span className="text-sm font-bold text-cyan-400 block leading-none">
-                          {selectedOption.isFree ? 'Grátis' : formatCurrency(shippingCost)}
+                          {shipping.isFree ? 'Grátis' : formatCurrency(shipping.price)}
                         </span>
                         <span className="text-[9px] text-slate-500 uppercase tracking-widest block mt-1">
-                          {selectedOption.companyName}
+                          {shipping.serviceName}
                         </span>
                       </div>
-                      <button 
+                      <button
                         onClick={() => setIsShippingTabOpen(true)}
-                        className="text-[10px] font-bold text-slate-400 hover:text-cyan-400 bg-slate-950 border border-slate-800 px-2 py-1.5 rounded-lg transition"
+                        className="text-[10px] font-bold text-slate-400 hover:text-cyan-400 bg-slate-950 border border-slate-800 px-2 py-1.5 rounded-lg transition cursor-pointer"
                       >
                         Alterar
                       </button>
                     </div>
                   ) : (
-                    <button 
+                    <button
                       onClick={() => setIsShippingTabOpen(true)}
-                      className="px-3 py-1.5 bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 rounded-lg text-xs font-bold hover:bg-cyan-500/20 transition flex items-center gap-1.5"
+                      className="px-3 py-1.5 bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 rounded-lg text-xs font-bold hover:bg-cyan-500/20 transition flex items-center gap-1.5 cursor-pointer"
                     >
                       <span>🚚</span> Calcular Frete
                     </button>
@@ -386,16 +418,16 @@ export default function Cart_Drawer({ isOpen, onClose }: CartDrawerProps) {
                 <button
                   onClick={clearCart}
                   disabled={cart.length === 0}
-                  className="px-4 py-3 bg-slate-900 text-slate-300 border border-slate-800 rounded-xl text-xs font-semibold hover:bg-slate-800 disabled:opacity-40 transition"
+                  className="px-4 py-3 bg-slate-900 text-slate-300 border border-slate-800 rounded-xl text-xs font-semibold hover:bg-slate-800 disabled:opacity-40 transition cursor-pointer"
                 >
                   Esvaziar
                 </button>
                 <button
-                  disabled={cart.length === 0 || !selectedShippingId || orderCreating}
-                  onClick={handleCreateOrder}
-                  className="flex-1 py-3 bg-cyan-500 text-slate-950 font-bold rounded-xl text-sm hover:bg-cyan-400 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                  disabled={cart.length === 0}
+                  onClick={handleGoToCartPage}
+                  className="flex-1 py-3 bg-cyan-500 text-slate-950 font-bold rounded-xl text-sm hover:bg-cyan-400 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
                 >
-                  {orderCreating ? 'Processando...' : 'Finalizar Pedido'}
+                  Fazer Pedido
                 </button>
               </div>
             </div>

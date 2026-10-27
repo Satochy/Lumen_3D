@@ -1,7 +1,10 @@
 import Link from 'next/link'
 import { prisma } from '@/lib/prisma'
+import { requireAdmin } from '@/lib/auth'
 
 export default async function AdminDashboardPage() {
+  await requireAdmin()
+
   // Busca algumas estatísticas reais para a dashboard
   const productCount = await prisma.product.count()
   const orderCount = await prisma.order.count()
