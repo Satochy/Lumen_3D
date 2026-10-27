@@ -1,5 +1,6 @@
 'use server'
 
+import { requireAdmin } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 // Certifique-se de que PaymentStatus e LogisticsStatus existem no seu schema.prisma
 import { PaymentStatus, LogisticsStatus } from '@prisma/client'

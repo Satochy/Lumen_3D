@@ -1,5 +1,6 @@
 {
-  "tailwindCSS.lint.suggestCanonicalClasses": "ignore"
+  "tailwindCSS.lint.suggestCanonicalClasses": "ignore",
+  "python.terminal.useEnvFile": true
 }
 //criada somente pra calar a boca do corretor de sintaxe do VSCode, 
 // que insiste em reclamar de classes do TailwindCSS.

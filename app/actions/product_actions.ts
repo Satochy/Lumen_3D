@@ -1,5 +1,6 @@
 'use server'
 
+import { requireAdmin } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
@@ -15,8 +16,6 @@ export type FormState = {
 
 // Limite da coluna Decimal(10, 2)
 const MAX_PRICE = 99999999.99
-
-async function requireAdmin() {}
 
 function slugify(text: string) {
   return text

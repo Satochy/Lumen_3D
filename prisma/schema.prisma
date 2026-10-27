@@ -40,8 +40,8 @@ enum LeadStatus {
 model User {
   id        String    @id @default(uuid())
   email     String    @unique
-  username  String    @unique
-  name      String?
+  username  String
+  name      String
   birthDate DateTime?
   phone     String?
   cpf       String?   @unique

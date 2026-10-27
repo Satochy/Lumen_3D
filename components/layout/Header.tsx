@@ -5,7 +5,7 @@ import MobileNav from './Mobile_Nav'
 
 interface UserType {
   id: string
-  name: string
+  name: string | null
   email: string
   role: string
   avatarUrl: string | null
