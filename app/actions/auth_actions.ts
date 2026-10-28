@@ -5,10 +5,12 @@ import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
+import { headers } from 'next/headers'
 
 const signInSchema = z.object({
   email: z.string().email('E-mail inválido'),
   password: z.string().min(8, 'A senha deve ter pelo menos 8 caracteres'),
+  rememberMe: z.boolean().optional(),
 })
 
 const signUpSchema = z.object({
@@ -18,10 +20,25 @@ const signUpSchema = z.object({
   password: z.string().min(8, 'A senha deve ter pelo menos 8 caracteres.'),
 })
 
+const resetRequestSchema = z.object({
+  email: z.string().email('Informe um endereço de e-mail válido.'),
+})
+
+const updatePasswordSchema = z
+  .object({
+    password: z.string().min(8, 'A nova senha deve ter pelo menos 8 caracteres.'),
+    confirmPassword: z.string().min(8, 'Confirme a nova senha.'),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: 'As senhas não coincidem.',
+    path: ['confirmPassword'],
+  })
+
 export async function signIn(_prevState: any, formData: FormData) {
   const raw = {
     email: formData.get('email'),
     password: formData.get('password'),
+    rememberMe: formData.get('rememberMe') === 'on',
   }
 
   const result = signInSchema.safeParse(raw)
@@ -29,7 +46,7 @@ export async function signIn(_prevState: any, formData: FormData) {
     return { error: result.error.issues[0].message }
   }
 
-  const supabase = await createClient()
+  const supabase = await createClient(Boolean(result.data.rememberMe))
   const { error } = await supabase.auth.signInWithPassword({
     email: result.data.email,
     password: result.data.password,
@@ -66,7 +83,6 @@ export async function signUp(_prevState: any, formData: FormData) {
 
   const { name, username, email, password } = result.data
 
-  // Apenas verifica se o EMAIL já existe, username não é mais unique
   const existingUser = await prisma.user.findUnique({
     where: { email },
   })
@@ -75,10 +91,7 @@ export async function signUp(_prevState: any, formData: FormData) {
     return { error: 'Este e-mail já está cadastrado.' }
   }
 
-  const supabase = await createClient()
-  
-  // Como o 'Confirm email' estará desligado no Supabase, 
-  // o signUp loga o usuário e salva o cookie da sessão automaticamente.
+  const supabase = await createClient(true)
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
@@ -100,8 +113,65 @@ export async function signUp(_prevState: any, formData: FormData) {
     })
   } catch (dbError) {
     console.error('Erro ao salvar no banco:', dbError)
-    // Se o banco falhar, o Supabase já criou o Auth. O usuário está logado,
-    // mas sem perfil Prisma. A função ensureProfileInDB vai curar isso nos próximos logins.
+  }
+
+  revalidatePath('/', 'layout')
+  redirect('/')
+}
+
+export async function requestPasswordReset(
+  _prevState: { error: string; success?: string },
+  formData: FormData
+): Promise<{ error: string; success?: string }> {
+  const parsed = resetRequestSchema.safeParse({
+    email: formData.get('email'),
+  })
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0].message }
+  }
+
+  const headersList = await headers()
+  const origin =
+    headersList.get('origin') ||
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    'http://localhost:3000'
+
+  const supabase = await createClient()
+  const { error } = await supabase.auth.resetPasswordForEmail(parsed.data.email, {
+    redirectTo: `${origin}/auth/callback?next=/reset-password`,
+  })
+
+  if (error) {
+    return { error: 'Não foi possível enviar o e-mail de recuperação. Tente novamente.' }
+  }
+
+  return {
+    error: '',
+    success: 'Se o e-mail estiver cadastrado, você receberá um link para redefinir sua senha.',
+  }
+}
+
+export async function updatePassword(
+  _prevState: { error: string },
+  formData: FormData
+): Promise<{ error: string }> {
+  const parsed = updatePasswordSchema.safeParse({
+    password: formData.get('password'),
+    confirmPassword: formData.get('confirmPassword'),
+  })
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0].message }
+  }
+
+  const supabase = await createClient()
+  const { error } = await supabase.auth.updateUser({
+    password: parsed.data.password,
+  })
+
+  if (error) {
+    return { error: error.message || 'Erro ao atualizar a senha.' }
   }
 
   revalidatePath('/', 'layout')

@@ -3,8 +3,8 @@
 import { useState, useActionState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { signIn, signUp } from '@/app/actions/auth_actions'
-import { Mail, Lock, User, AtSign, Sparkles, ArrowLeft } from 'lucide-react'
+import { signIn, signUp, requestPasswordReset } from '@/app/actions/auth_actions'
+import { Mail, Lock, User, AtSign, Sparkles, ArrowLeft, Eye, EyeOff, KeyRound } from 'lucide-react'
 
 interface AuthCardProps {
   initialMode?: 'login' | 'register'
@@ -14,11 +14,19 @@ const PANEL_BACKGROUND_IMAGE = '/bg_login.jpg'
 
 export default function Auth_Card({ initialMode = 'login' }: AuthCardProps) {
   const [isSignUp, setIsSignUp] = useState(initialMode === 'register')
+  const [isForgotPassword, setIsForgotPassword] = useState(false)
+  const [showLoginPassword, setShowLoginPassword] = useState(false)
+  const [showRegisterPassword, setShowRegisterPassword] = useState(false)
 
   const [loginState, loginAction, isLoginPending] = useActionState(signIn, { error: '' })
   const [registerState, registerAction, isRegisterPending] = useActionState(signUp, { error: '' })
+  const [resetState, resetAction, isResetPending] = useActionState(requestPasswordReset, {
+    error: '',
+    success: '',
+  })
 
   const handleToggleMode = (targetSignUp: boolean) => {
+    setIsForgotPassword(false)
     setIsSignUp(targetSignUp)
     if (typeof window !== 'undefined') {
       window.history.replaceState(null, '', targetSignUp ? '/register' : '/login')
@@ -130,12 +138,20 @@ export default function Auth_Card({ initialMode = 'login' }: AuthCardProps) {
               <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 name="password"
-                type="password"
+                type={showRegisterPassword ? 'text' : 'password'}
                 required
                 minLength={8}
                 placeholder="Senha (mínimo 8 caracteres)"
-                className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-950/90 border border-slate-800/90 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition"
+                className="w-full pl-10 pr-10 py-3 rounded-xl bg-slate-950/90 border border-slate-800/90 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition"
               />
+              <button
+                type="button"
+                onClick={() => setShowRegisterPassword((prev) => !prev)}
+                aria-label={showRegisterPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-cyan-400 transition cursor-pointer"
+              >
+                {showRegisterPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
 
             <button
@@ -167,7 +183,7 @@ export default function Auth_Card({ initialMode = 'login' }: AuthCardProps) {
         </div>
 
         {/* =====================================================================
-            FORMULÁRIO 2: ENTRAR (Fica na metade esquerda quando ativo)
+            FORMULÁRIO 2: ENTRAR / RECUPERAR SENHA (Fica na metade esquerda quando ativo)
            ===================================================================== */}
         <div
           className={`w-full md:w-1/2 md:absolute md:top-0 md:left-0 md:h-full flex flex-col justify-center px-7 sm:px-11 py-10 transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] ${
@@ -176,76 +192,166 @@ export default function Auth_Card({ initialMode = 'login' }: AuthCardProps) {
               : 'block md:translate-x-0 opacity-100 z-20'
           }`}
         >
-          <div className="space-y-2 text-center md:text-left">
-            <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-cyan-400">
-              <Sparkles className="w-3 h-3" /> Bem-vindo de volta!
-            </span>
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-              Entrar
-            </h1>
-            <p className="text-xs text-slate-400">
-              Use seu e-mail e senha cadastrados para acessar sua conta.
-            </p>
-          </div>
-
-          <form action={loginAction} className="mt-6 space-y-4">
-            {loginState?.error && (
-              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-xs text-rose-400 text-center">
-                {loginState.error}
+          {isForgotPassword ? (
+            <div className="space-y-5 animate-in fade-in duration-300">
+              <div className="space-y-2 text-center md:text-left">
+                <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-cyan-400">
+                  <KeyRound className="w-3 h-3" /> Recuperação de Acesso
+                </span>
+                <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+                  Esqueceu a senha?
+                </h1>
+                <p className="text-xs text-slate-400">
+                  Informe o seu e-mail cadastrado e enviaremos um link seguro para você criar uma nova senha.
+                </p>
               </div>
-            )}
 
-            <div className="space-y-1.5">
-              <label className="block text-[11px] font-semibold text-slate-300">E-mail</label>
-              <div className="relative">
-                <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                <input
-                  name="email"
-                  type="email"
-                  required
-                  placeholder="insira seu email"
-                  className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-950/90 border border-slate-800/90 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition"
-                />
+              <form action={resetAction} className="space-y-4">
+                {resetState?.error && (
+                  <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-xs text-rose-400 text-center">
+                    {resetState.error}
+                  </div>
+                )}
+
+                {resetState?.success && (
+                  <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-400 text-center">
+                    {resetState.success}
+                  </div>
+                )}
+
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    name="email"
+                    type="email"
+                    required
+                    placeholder="seu@email.com"
+                    className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-950/90 border border-slate-800/90 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isResetPending}
+                  className="btn-fx hover-btn-bounce w-full py-3.5 bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-slate-950 font-extrabold text-xs uppercase tracking-wider rounded-xl transition shadow-lg shadow-cyan-500/20 cursor-pointer"
+                >
+                  {isResetPending ? 'Enviando link...' : 'Enviar Link de Recuperação'}
+                </button>
+              </form>
+
+              <div className="text-center md:text-left pt-1">
+                <button
+                  type="button"
+                  onClick={() => setIsForgotPassword(false)}
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-cyan-400 transition cursor-pointer"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  Voltar para o Login
+                </button>
               </div>
             </div>
-
-            <div className="space-y-1.5">
-              <label className="block text-[11px] font-semibold text-slate-300">Senha</label>
-              <div className="relative">
-                <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                <input
-                  name="password"
-                  type="password"
-                  required
-                  minLength={8}
-                  placeholder="insira sua senha"
-                  className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-950/90 border border-slate-800/90 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition"
-                />
+          ) : (
+            <>
+              <div className="space-y-2 text-center md:text-left">
+                <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-cyan-400">
+                  <Sparkles className="w-3 h-3" /> Bem-vindo de volta!
+                </span>
+                <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+                  Entrar
+                </h1>
+                <p className="text-xs text-slate-400">
+                  Use seu e-mail e senha cadastrados para acessar sua conta.
+                </p>
               </div>
-            </div>
 
-            <button
-              type="submit"
-              disabled={isLoginPending}
-              className="btn-fx hover-btn-bounce w-full py-3.5 mt-2 bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-slate-950 font-extrabold text-xs uppercase tracking-wider rounded-xl transition shadow-lg shadow-cyan-500/20 cursor-pointer"
-            >
-              {isLoginPending ? 'Autenticando...' : 'Entrar'}
-            </button>
-          </form>
+              <form action={loginAction} className="mt-6 space-y-4">
+                {loginState?.error && (
+                  <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-xs text-rose-400 text-center">
+                    {loginState.error}
+                  </div>
+                )}
 
-          {/* Alternador visível apenas no Mobile */}
-          <div className="mt-6 pt-4 border-t border-slate-800/80 text-center md:hidden">
-            <p className="text-xs text-slate-400">
-              Ainda não tem conta?{' '}
-              <button
-                type="button"
-                onClick={() => handleToggleMode(true)}
-                className="text-cyan-400 font-bold hover:underline cursor-pointer"
-              >
-                Criar Conta
-              </button>
-            </p>
-          </div>
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-semibold text-slate-300">E-mail</label>
+                  <div className="relative">
+                    <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <input
+                      name="email"
+                      type="email"
+                      required
+                      placeholder="insira seu email"
+                      className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-950/90 border border-slate-800/90 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-semibold text-slate-300">Senha</label>
+                  <div className="relative">
+                    <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <input
+                      name="password"
+                      type={showLoginPassword ? 'text' : 'password'}
+                      required
+                      minLength={8}
+                      placeholder="insira sua senha"
+                      className="w-full pl-10 pr-10 py-3 rounded-xl bg-slate-950/90 border border-slate-800/90 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowLoginPassword((prev) => !prev)}
+                      aria-label={showLoginPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-cyan-400 transition cursor-pointer"
+                    >
+                      {showLoginPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-0.5">
+                  <label className="inline-flex items-center gap-2 text-xs text-slate-300 hover:text-white cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      name="rememberMe"
+                      defaultChecked
+                      className="w-3.5 h-3.5 rounded border-slate-700 bg-slate-950 accent-cyan-500 cursor-pointer"
+                    />
+                    <span>Lembrar de mim</span>
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsForgotPassword(true)}
+                    className="text-xs font-semibold text-cyan-400 hover:text-cyan-300 hover:underline transition cursor-pointer"
+                  >
+                    Esqueci minha senha
+                  </button>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isLoginPending}
+                  className="btn-fx hover-btn-bounce w-full py-3.5 mt-2 bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-slate-950 font-extrabold text-xs uppercase tracking-wider rounded-xl transition shadow-lg shadow-cyan-500/20 cursor-pointer"
+                >
+                  {isLoginPending ? 'Autenticando...' : 'Entrar'}
+                </button>
+              </form>
+
+              {/* Alternador visível apenas no Mobile */}
+              <div className="mt-6 pt-4 border-t border-slate-800/80 text-center md:hidden">
+                <p className="text-xs text-slate-400">
+                  Ainda não tem conta?{' '}
+                  <button
+                    type="button"
+                    onClick={() => handleToggleMode(true)}
+                    className="text-cyan-400 font-bold hover:underline cursor-pointer"
+                  >
+                    Criar Conta
+                  </button>
+                </p>
+              </div>
+            </>
+          )}
         </div>
 
         {/* =====================================================================
