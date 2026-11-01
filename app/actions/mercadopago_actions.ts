@@ -1,9 +1,11 @@
 'use server'
 
 import { z } from 'zod'
+import { revalidatePath } from 'next/cache'
 import { MercadoPagoConfig, Preference } from 'mercadopago'
 import { prisma } from '@/lib/prisma'
 import { getCurrentUser } from '@/lib/auth'
+import { syncOrderWithMercadoPago } from '@/lib/mercadopago_sync'
 
 export interface CreatePreferenceResult {
   success: boolean
@@ -101,6 +103,11 @@ export async function createPreferenceAction(
       'http://localhost:3000'
     ).replace(/\/$/, '')
 
+    const isPublicUrl =
+      baseUrl.startsWith('https://') &&
+      !baseUrl.includes('localhost') &&
+      !baseUrl.includes('127.0.0.1')
+
     const preferenceResponse = await preferenceClient.create({
       body: {
         items: preferenceItems,
@@ -110,6 +117,9 @@ export async function createPreferenceAction(
           surname: user.name?.split(' ').slice(1).join(' ') || undefined,
         },
         external_reference: order.id,
+        ...(isPublicUrl
+          ? { notification_url: `${baseUrl}/api/webhooks/mercadopago` }
+          : {}),
         back_urls: {
           success: `${baseUrl}/profile/orders?status=success&orderId=${order.id}`,
           pending: `${baseUrl}/profile/orders?status=pending&orderId=${order.id}`,
@@ -143,5 +153,58 @@ export async function createPreferenceAction(
       success: false,
       error: 'Falha ao inicializar a preferência de pagamento no Mercado Pago.',
     }
+  }
+}
+
+/**
+ * Verifica ativamente na API do Mercado Pago se o pedido do usuário logado já possui pagamento aprovado
+ * e, em caso positivo, confirma o pedido como PAID e executa a baixa atômica do estoque.
+ */
+export async function verifyOrderPaymentStatusAction(
+  orderId: string,
+  paymentId?: string | null
+): Promise<{ success: boolean; isPaid: boolean; status?: string; error?: string }> {
+  const user = await getCurrentUser()
+  if (!user) {
+    return { success: false, isPaid: false, error: 'Sessão não autenticada.' }
+  }
+
+  const parsedId = orderIdSchema.safeParse(orderId)
+  if (!parsedId.success) {
+    return { success: false, isPaid: false, error: 'ID do pedido inválido.' }
+  }
+
+  const order = await prisma.order.findFirst({
+    where: {
+      id: parsedId.data,
+      userId: user.id,
+    },
+    select: {
+      id: true,
+      paymentStatus: true,
+    },
+  })
+
+  if (!order) {
+    return { success: false, isPaid: false, error: 'Pedido não encontrado.' }
+  }
+
+  if (order.paymentStatus === 'PAID') {
+    return { success: true, isPaid: true, status: 'approved' }
+  }
+
+  const syncResult = await syncOrderWithMercadoPago(order.id, paymentId)
+  if (syncResult.isPaid) {
+    revalidatePath(`/marketplace/checkout/${order.id}`)
+    revalidatePath('/profile/orders')
+    revalidatePath('/admin/orders')
+    revalidatePath('/admin')
+    revalidatePath('/marketplace')
+  }
+
+  return {
+    success: true,
+    isPaid: syncResult.isPaid,
+    status: syncResult.status,
   }
 }

@@ -5,6 +5,7 @@ import { Header, Footer } from '@/components/layout'
 import Profile_Navbar from '@/components/profile/Profile_Navbar'
 import Cart_Button from '@/components/cart/Cart_Button'
 import { getCurrentUser } from '@/lib/auth'
+import { syncOrderWithMercadoPago } from '@/lib/mercadopago_sync'
 import { prisma } from '@/lib/prisma'
 import { formatCurrency } from '@/lib/format_currency'
 
@@ -30,13 +31,29 @@ export default async function UserOrdersPage() {
     redirect('/login')
   }
 
-  const orders = await prisma.order.findMany({
+  let orders = await prisma.order.findMany({
     where: { userId: user.id },
     include: {
       items: true,
     },
     orderBy: { createdAt: 'desc' },
   })
+
+  const pendingOrders = orders.filter((o) => o.paymentStatus === 'PENDING')
+  if (pendingOrders.length > 0) {
+    const syncResults = await Promise.all(
+      pendingOrders.map((o) => syncOrderWithMercadoPago(o.id))
+    )
+    if (syncResults.some((r) => r.isPaid)) {
+      orders = await prisma.order.findMany({
+        where: { userId: user.id },
+        include: {
+          items: true,
+        },
+        orderBy: { createdAt: 'desc' },
+      })
+    }
+  }
 
   return (
     <div className="min-h-screen bg-[#050811] text-slate-100 flex flex-col font-sans">

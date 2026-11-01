@@ -7,6 +7,7 @@ import { Prisma } from '@prisma/client'
 import { MercadoPagoConfig, Payment } from 'mercadopago'
 import { prisma } from '@/lib/prisma'
 import { getCurrentUser } from '@/lib/auth'
+import { confirmApprovedPaymentInDb } from '@/lib/mercadopago_sync'
 import { calculateShippingAction, type ShippingOption } from './shipping_actions'
 import { isLocalShippingRegion, isValidCEP, sanitizeCEP } from '@/lib/shipping/shipping_utils'
 
@@ -457,22 +458,22 @@ export interface ProcessPaymentResult {
 
 const paymentFormDataSchema = z.object({
   payment_method_id: z.string().trim().min(1, 'Método de pagamento inválido.'),
-  token: z.string().optional(),
-  issuer_id: z.union([z.string(), z.number()]).optional(),
-  installments: z.number().int().positive().optional(),
+  token: z.string().nullish(),
+  issuer_id: z.union([z.string(), z.number()]).nullish(),
+  installments: z.union([z.number(), z.string()]).nullish(),
   payer: z
     .object({
-      email: z.string().email().optional(),
-      first_name: z.string().optional(),
-      last_name: z.string().optional(),
+      email: z.string().nullish(),
+      first_name: z.string().nullish(),
+      last_name: z.string().nullish(),
       identification: z
         .object({
-          type: z.string().optional(),
-          number: z.string().optional(),
+          type: z.string().nullish(),
+          number: z.string().nullish(),
         })
-        .optional(),
+        .nullish(),
     })
-    .optional(),
+    .nullish(),
 })
 
 const processPaymentSchema = z.object({
@@ -565,35 +566,62 @@ export async function processOrderPaymentAction(
     const paymentClient = new Payment(mpConfig)
 
     const issuerNumber =
-      formData.issuer_id !== undefined && formData.issuer_id !== ''
+      formData.issuer_id !== undefined &&
+      formData.issuer_id !== null &&
+      String(formData.issuer_id).trim() !== ''
         ? Number(formData.issuer_id)
         : undefined
+
+    const installmentsNumber =
+      formData.installments !== undefined &&
+      formData.installments !== null &&
+      Number(formData.installments) > 0
+        ? Number(formData.installments)
+        : 1
+
+    const baseUrl = (
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      process.env.NEXT_PUBLIC_APP_URL ||
+      ''
+    ).replace(/\/$/, '')
+    const isPublicUrl =
+      baseUrl.startsWith('https://') &&
+      !baseUrl.includes('localhost') &&
+      !baseUrl.includes('127.0.0.1')
 
     const paymentResponse = await paymentClient.create({
       body: {
         transaction_amount: transactionAmount,
         description: `Pedido Lúmen 3D #${order.id.slice(0, 8)}`,
         payment_method_id: formData.payment_method_id,
-        token: formData.token,
-        installments: formData.installments ?? 1,
+        token: formData.token || undefined,
+        installments: installmentsNumber,
         issuer_id:
           issuerNumber !== undefined && !Number.isNaN(issuerNumber)
             ? issuerNumber
             : undefined,
         external_reference: order.id,
+        ...(isPublicUrl
+          ? { notification_url: `${baseUrl}/api/webhooks/mercadopago` }
+          : {}),
         metadata: {
           order_id: order.id,
           user_id: user.id,
         },
         payer: {
-          email: formData.payer?.email || user.email,
-          first_name: formData.payer?.first_name || user.name?.split(' ')[0] || undefined,
+          email:
+            formData.payer?.email && formData.payer.email.includes('@')
+              ? formData.payer.email
+              : user.email,
+          first_name:
+            formData.payer?.first_name || user.name?.split(' ')[0] || undefined,
           last_name:
             formData.payer?.last_name ||
             user.name?.split(' ').slice(1).join(' ') ||
             undefined,
           identification:
-            formData.payer?.identification?.type && formData.payer?.identification?.number
+            formData.payer?.identification?.type &&
+            formData.payer?.identification?.number
               ? {
                   type: formData.payer.identification.type,
                   number: formData.payer.identification.number.replace(/\D/g, ''),
@@ -610,64 +638,9 @@ export async function processOrderPaymentAction(
     const mpPaymentId = paymentResponse.id ? String(paymentResponse.id) : undefined
 
     if (mpStatus === 'approved' && mpPaymentId) {
-      const eventKey = `mp-approved-${mpPaymentId}`
-
-      await prisma.$transaction(async (tx) => {
-        const existingLog = await tx.paymentWebhookLog.findUnique({
-          where: { eventId: eventKey },
-        })
-        if (existingLog) return
-
-        const freshOrder = await tx.order.findUnique({
-          where: { id: order.id },
-          include: { items: true },
-        })
-        if (!freshOrder || freshOrder.paymentStatus === 'PAID') return
-
-        await tx.paymentWebhookLog.create({
-          data: {
-            eventId: eventKey,
-            status: 'approved',
-          },
-        })
-
-        for (const item of freshOrder.items) {
-          if (item.variantId) {
-            const updatedVariant = await tx.variant.updateMany({
-              where: {
-                id: item.variantId,
-                stock: { gte: item.quantity },
-              },
-              data: {
-                stock: { decrement: item.quantity },
-              },
-            })
-            if (updatedVariant.count === 0) {
-              throw new Error(`Estoque insuficiente para confirmar o item "${item.productTitle}".`)
-            }
-          } else {
-            const updatedProduct = await tx.product.updateMany({
-              where: {
-                id: item.productId,
-                archivedAt: null,
-                stock: { gte: item.quantity },
-              },
-              data: {
-                stock: { decrement: item.quantity },
-              },
-            })
-            if (updatedProduct.count === 0) {
-              throw new Error(`Estoque insuficiente para confirmar o item "${item.productTitle}".`)
-            }
-          }
-        }
-
-        await tx.order.update({
-          where: { id: order.id },
-          data: {
-            paymentStatus: 'PAID',
-          },
-        })
+      await confirmApprovedPaymentInDb({
+        orderId: order.id,
+        paymentId: mpPaymentId,
       })
 
       revalidatePath(`/marketplace/checkout/${order.id}`)

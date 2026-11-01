@@ -7,6 +7,7 @@ import Checkout_Client, {
 } from '@/components/checkout/Checkout_Client'
 import { createPreferenceAction } from '@/app/actions/mercadopago_actions'
 import { getCurrentUser } from '@/lib/auth'
+import { syncOrderWithMercadoPago } from '@/lib/mercadopago_sync'
 import { prisma } from '@/lib/prisma'
 
 export default async function CheckoutOrderPage({
@@ -44,8 +45,16 @@ export default async function CheckoutOrderPage({
     redirect('/marketplace')
   }
 
+  let effectivePaymentStatus = order.paymentStatus
+  if (effectivePaymentStatus === 'PENDING') {
+    const syncRes = await syncOrderWithMercadoPago(order.id)
+    if (syncRes.isPaid) {
+      effectivePaymentStatus = 'PAID'
+    }
+  }
+
   let preferenceId: string | null = null
-  if (order.paymentStatus !== 'PAID') {
+  if (effectivePaymentStatus !== 'PAID') {
     const preferenceResult = await createPreferenceAction(order.id)
     if (preferenceResult.success) {
       preferenceId =
@@ -55,7 +64,7 @@ export default async function CheckoutOrderPage({
 
   const serializedOrder: SerializedCheckoutOrder = {
     id: order.id,
-    paymentStatus: order.paymentStatus,
+    paymentStatus: effectivePaymentStatus,
     logisticsStatus: order.logisticsStatus,
     totalAmount: Number(order.totalAmount),
     shippingCost: Number(order.shippingCost),

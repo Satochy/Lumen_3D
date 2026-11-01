@@ -13,6 +13,7 @@ import {
   RefreshCw,
 } from 'lucide-react'
 import { processOrderPaymentAction } from '@/app/actions/order_actions'
+import { verifyOrderPaymentStatusAction } from '@/app/actions/mercadopago_actions'
 
 export interface MercadoPagoBrickProps {
   preferenceId: string | null
@@ -39,11 +40,13 @@ export default function MercadoPagoBrick({
   const [isApproved, setIsApproved] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [pixData, setPixData] = useState<{
+    paymentId?: string
     qrCode: string | null
     qrCodeBase64: string | null
     ticketUrl: string | null
   } | null>(null)
   const [copiedPix, setCopiedPix] = useState(false)
+  const [isCheckingStatus, setIsCheckingStatus] = useState(false)
 
   const nameParts = (payerName || '').trim().split(/\s+/)
   const firstName = nameParts[0] || undefined
@@ -144,11 +147,35 @@ export default function MercadoPagoBrick({
         <div className="pt-2 flex flex-wrap items-center justify-center gap-3">
           <button
             type="button"
-            onClick={() => router.refresh()}
-            className="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 font-bold text-xs transition inline-flex items-center gap-2 cursor-pointer"
+            disabled={isCheckingStatus}
+            onClick={async () => {
+              setIsCheckingStatus(true)
+              setErrorMessage(null)
+              try {
+                const check = await verifyOrderPaymentStatusAction(
+                  orderId,
+                  pixData.paymentId
+                )
+                if (check.isPaid) {
+                  setIsApproved(true)
+                }
+                router.refresh()
+              } finally {
+                setIsCheckingStatus(false)
+              }
+            }}
+            className="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 font-bold text-xs transition inline-flex items-center gap-2 cursor-pointer disabled:opacity-50"
           >
-            <RefreshCw className="w-3.5 h-3.5 text-cyan-400" />
-            <span>Já paguei • Verificar Status</span>
+            <RefreshCw
+              className={`w-3.5 h-3.5 text-cyan-400 ${
+                isCheckingStatus ? 'animate-spin' : ''
+              }`}
+            />
+            <span>
+              {isCheckingStatus
+                ? 'Verificando...'
+                : 'Já paguei • Verificar Status'}
+            </span>
           </button>
           <Link
             href="/profile/orders"
@@ -233,6 +260,7 @@ export default function MercadoPagoBrick({
 
             if (result.qrCode || result.qrCodeBase64) {
               setPixData({
+                paymentId: result.paymentId,
                 qrCode: result.qrCode ?? null,
                 qrCodeBase64: result.qrCodeBase64 ?? null,
                 ticketUrl: result.ticketUrl ?? null,
