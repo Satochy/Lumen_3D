@@ -1,8 +1,10 @@
 'use server'
 
+import { randomUUID } from 'crypto'
 import { z } from 'zod'
 import { revalidatePath } from 'next/cache'
 import { Prisma } from '@prisma/client'
+import { MercadoPagoConfig, Payment } from 'mercadopago'
 import { prisma } from '@/lib/prisma'
 import { getCurrentUser } from '@/lib/auth'
 import { calculateShippingAction, type ShippingOption } from './shipping_actions'
@@ -438,6 +440,277 @@ export async function createOrderAction(input: OrderInput): Promise<CreateOrderR
     return {
       success: false,
       error: 'Erro interno ao processar seu pedido. Tente novamente em instantes.',
+    }
+  }
+}
+
+export interface ProcessPaymentResult {
+  success: boolean
+  error?: string
+  status?: 'approved' | 'pending' | 'in_process' | 'rejected' | string
+  statusDetail?: string
+  paymentId?: string
+  qrCode?: string | null
+  qrCodeBase64?: string | null
+  ticketUrl?: string | null
+}
+
+const paymentFormDataSchema = z.object({
+  payment_method_id: z.string().trim().min(1, 'Método de pagamento inválido.'),
+  token: z.string().optional(),
+  issuer_id: z.union([z.string(), z.number()]).optional(),
+  installments: z.number().int().positive().optional(),
+  payer: z
+    .object({
+      email: z.string().email().optional(),
+      first_name: z.string().optional(),
+      last_name: z.string().optional(),
+      identification: z
+        .object({
+          type: z.string().optional(),
+          number: z.string().optional(),
+        })
+        .optional(),
+    })
+    .optional(),
+})
+
+const processPaymentSchema = z.object({
+  orderId: z.string().uuid('ID do pedido inválido.'),
+  formData: paymentFormDataSchema,
+})
+
+/**
+ * Processa o pagamento transparente (PIX ou Cartão) via Mercado Pago Checkout Bricks.
+ *
+ * Regras inegociáveis:
+ * - Valida sessão (getCurrentUser) e propriedade do pedido (userId === user.id).
+ * - Ignora transaction_amount do cliente; utiliza estritamente order.totalAmount do banco.
+ * - Quando o pagamento é aprovado imediatamente (ex: cartão), registra idempotência em
+ *   PaymentWebhookLog, marca o pedido como PAID e executa a baixa atômica do estoque (D05).
+ * - Quando gera PIX (pending), retorna o QR Code Base64 e o código Copia e Cola para exibição.
+ */
+export async function processOrderPaymentAction(
+  orderId: string,
+  rawFormData: unknown
+): Promise<ProcessPaymentResult> {
+  const user = await getCurrentUser()
+  if (!user) {
+    return {
+      success: false,
+      error: 'Sessão expirada. Faça login novamente para concluir o pagamento.',
+    }
+  }
+
+  const parsed = processPaymentSchema.safeParse({
+    orderId,
+    formData: rawFormData,
+  })
+
+  if (!parsed.success) {
+    return {
+      success: false,
+      error: parsed.error.issues[0]?.message || 'Dados de pagamento inválidos.',
+    }
+  }
+
+  const accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN
+  if (!accessToken) {
+    console.error('MERCADOPAGO_ACCESS_TOKEN não configurado no ambiente.')
+    return {
+      success: false,
+      error: 'O serviço de pagamento está temporariamente indisponível.',
+    }
+  }
+
+  const { formData } = parsed.data
+
+  try {
+    const order = await prisma.order.findFirst({
+      where: {
+        id: parsed.data.orderId,
+        userId: user.id,
+      },
+      include: {
+        items: true,
+      },
+    })
+
+    if (!order) {
+      return {
+        success: false,
+        error: 'Pedido não encontrado ou não pertence à sua conta.',
+      }
+    }
+
+    if (order.paymentStatus === 'PAID') {
+      return {
+        success: true,
+        status: 'approved',
+      }
+    }
+
+    const transactionAmount = Number(order.totalAmount)
+    if (transactionAmount <= 0) {
+      return {
+        success: false,
+        error: 'Valor do pedido inválido para processamento.',
+      }
+    }
+
+    const mpConfig = new MercadoPagoConfig({
+      accessToken,
+      options: { timeout: 15000 },
+    })
+    const paymentClient = new Payment(mpConfig)
+
+    const issuerNumber =
+      formData.issuer_id !== undefined && formData.issuer_id !== ''
+        ? Number(formData.issuer_id)
+        : undefined
+
+    const paymentResponse = await paymentClient.create({
+      body: {
+        transaction_amount: transactionAmount,
+        description: `Pedido Lúmen 3D #${order.id.slice(0, 8)}`,
+        payment_method_id: formData.payment_method_id,
+        token: formData.token,
+        installments: formData.installments ?? 1,
+        issuer_id:
+          issuerNumber !== undefined && !Number.isNaN(issuerNumber)
+            ? issuerNumber
+            : undefined,
+        external_reference: order.id,
+        metadata: {
+          order_id: order.id,
+          user_id: user.id,
+        },
+        payer: {
+          email: formData.payer?.email || user.email,
+          first_name: formData.payer?.first_name || user.name?.split(' ')[0] || undefined,
+          last_name:
+            formData.payer?.last_name ||
+            user.name?.split(' ').slice(1).join(' ') ||
+            undefined,
+          identification:
+            formData.payer?.identification?.type && formData.payer?.identification?.number
+              ? {
+                  type: formData.payer.identification.type,
+                  number: formData.payer.identification.number.replace(/\D/g, ''),
+                }
+              : undefined,
+        },
+      },
+      requestOptions: {
+        idempotencyKey: `${order.id}-${randomUUID()}`,
+      },
+    })
+
+    const mpStatus = paymentResponse.status || 'pending'
+    const mpPaymentId = paymentResponse.id ? String(paymentResponse.id) : undefined
+
+    if (mpStatus === 'approved' && mpPaymentId) {
+      const eventKey = `mp-approved-${mpPaymentId}`
+
+      await prisma.$transaction(async (tx) => {
+        const existingLog = await tx.paymentWebhookLog.findUnique({
+          where: { eventId: eventKey },
+        })
+        if (existingLog) return
+
+        const freshOrder = await tx.order.findUnique({
+          where: { id: order.id },
+          include: { items: true },
+        })
+        if (!freshOrder || freshOrder.paymentStatus === 'PAID') return
+
+        await tx.paymentWebhookLog.create({
+          data: {
+            eventId: eventKey,
+            status: 'approved',
+          },
+        })
+
+        for (const item of freshOrder.items) {
+          if (item.variantId) {
+            const updatedVariant = await tx.variant.updateMany({
+              where: {
+                id: item.variantId,
+                stock: { gte: item.quantity },
+              },
+              data: {
+                stock: { decrement: item.quantity },
+              },
+            })
+            if (updatedVariant.count === 0) {
+              throw new Error(`Estoque insuficiente para confirmar o item "${item.productTitle}".`)
+            }
+          } else {
+            const updatedProduct = await tx.product.updateMany({
+              where: {
+                id: item.productId,
+                archivedAt: null,
+                stock: { gte: item.quantity },
+              },
+              data: {
+                stock: { decrement: item.quantity },
+              },
+            })
+            if (updatedProduct.count === 0) {
+              throw new Error(`Estoque insuficiente para confirmar o item "${item.productTitle}".`)
+            }
+          }
+        }
+
+        await tx.order.update({
+          where: { id: order.id },
+          data: {
+            paymentStatus: 'PAID',
+          },
+        })
+      })
+
+      revalidatePath(`/marketplace/checkout/${order.id}`)
+      revalidatePath('/profile/orders')
+      revalidatePath('/admin/orders')
+      revalidatePath('/admin')
+      revalidatePath('/marketplace')
+
+      return {
+        success: true,
+        status: 'approved',
+        statusDetail: paymentResponse.status_detail,
+        paymentId: mpPaymentId,
+      }
+    }
+
+    if (mpStatus === 'rejected' || mpStatus === 'cancelled') {
+      return {
+        success: false,
+        status: mpStatus,
+        statusDetail: paymentResponse.status_detail,
+        error:
+          'O pagamento não foi autorizado pela operadora. Verifique os dados ou tente outro meio de pagamento.',
+      }
+    }
+
+    const txData = paymentResponse.point_of_interaction?.transaction_data
+
+    return {
+      success: true,
+      status: mpStatus,
+      statusDetail: paymentResponse.status_detail,
+      paymentId: mpPaymentId,
+      qrCode: txData?.qr_code ?? null,
+      qrCodeBase64: txData?.qr_code_base64 ?? null,
+      ticketUrl: txData?.ticket_url ?? null,
+    }
+  } catch (err) {
+    console.error('Erro ao processar pagamento no Mercado Pago:', err)
+    return {
+      success: false,
+      error:
+        'Não foi possível processar o pagamento no momento. Verifique os dados informados e tente novamente.',
     }
   }
 }

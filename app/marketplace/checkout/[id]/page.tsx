@@ -5,6 +5,7 @@ import Checkout_Client, {
   type SerializedCheckoutOrder,
   type ShippingSnapshotData,
 } from '@/components/checkout/Checkout_Client'
+import { createPreferenceAction } from '@/app/actions/mercadopago_actions'
 import { getCurrentUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 
@@ -41,6 +42,15 @@ export default async function CheckoutOrderPage({
 
   if (!order) {
     redirect('/marketplace')
+  }
+
+  let preferenceId: string | null = null
+  if (order.paymentStatus !== 'PAID') {
+    const preferenceResult = await createPreferenceAction(order.id)
+    if (preferenceResult.success) {
+      preferenceId =
+        preferenceResult.data?.preferenceId ?? preferenceResult.preferenceId ?? null
+    }
   }
 
   const serializedOrder: SerializedCheckoutOrder = {
@@ -92,6 +102,7 @@ export default async function CheckoutOrderPage({
 
         <Checkout_Client
           order={serializedOrder}
+          preferenceId={preferenceId}
           payerEmail={user.email}
           payerName={user.name}
         />

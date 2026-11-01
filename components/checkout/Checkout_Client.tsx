@@ -7,11 +7,11 @@ import {
   Truck,
   CheckCircle2,
   Clock,
-  CreditCard,
   ArrowLeft,
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/format_currency'
 import { formatCEP, sanitizeCEP } from '@/lib/shipping/shipping_utils'
+import MercadoPagoBrick from '@/components/checkout/MercadoPagoBrick'
 
 export interface SerializedCheckoutItem {
   id: string
@@ -52,12 +52,14 @@ export interface SerializedCheckoutOrder {
 
 interface CheckoutClientProps {
   order: SerializedCheckoutOrder
+  preferenceId: string | null
   payerEmail: string
   payerName: string | null
 }
 
 export default function Checkout_Client({
   order,
+  preferenceId,
   payerEmail,
   payerName,
 }: CheckoutClientProps) {
@@ -73,7 +75,7 @@ export default function Checkout_Client({
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-      {/* Coluna Esquerda: Placeholder Checkout Bricks */}
+      {/* Coluna Esquerda: Pagamento (MercadoPagoBrick) */}
       <div className="lg:col-span-7 space-y-6">
         <div className="bg-[#0a0e1a] border border-slate-800/80 rounded-2xl p-6 space-y-5">
           <div className="flex items-center justify-between border-b border-slate-800 pb-4">
@@ -83,7 +85,11 @@ export default function Checkout_Client({
                 Pagamento do Pedido
               </h2>
               <p className="text-xs text-slate-400 mt-0.5">
-                Comprador: <span className="text-slate-300 font-medium">{payerName || payerEmail}</span> ({payerEmail})
+                Comprador:{' '}
+                <span className="text-slate-300 font-medium">
+                  {payerName || payerEmail}
+                </span>{' '}
+                ({payerEmail})
               </p>
             </div>
             <span className="font-mono text-xs text-slate-400 bg-slate-900 border border-slate-800 px-2.5 py-1 rounded-lg">
@@ -108,19 +114,13 @@ export default function Checkout_Client({
               </Link>
             </div>
           ) : (
-            <div className="p-10 rounded-2xl border border-dashed border-cyan-500/30 bg-slate-950/60 text-center space-y-3">
-              <div className="w-12 h-12 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center mx-auto text-cyan-400">
-                <CreditCard className="w-6 h-6" />
-              </div>
-              <h3 className="text-base font-bold text-white">
-                Integração Checkout Bricks (Em breve)
-              </h3>
-              <p className="text-xs text-slate-400 max-w-md mx-auto leading-relaxed">
-                O formulário transparente do Mercado Pago para pagamento via{' '}
-                <strong className="text-slate-200">PIX</strong> e{' '}
-                <strong className="text-slate-200">Cartão de Crédito/Débito</strong> será renderizado nesta área na Fase 3.
-              </p>
-            </div>
+            <MercadoPagoBrick
+              preferenceId={preferenceId}
+              orderId={order.id}
+              amount={order.totalAmount}
+              payerEmail={payerEmail}
+              payerName={payerName}
+            />
           )}
         </div>
 
@@ -144,11 +144,19 @@ export default function Checkout_Client({
               <Package className="w-4 h-4 text-cyan-400" />
               Resumo do Pedido
             </h2>
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+            <span
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold border ${
+                order.paymentStatus === 'PAID'
+                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                  : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+              }`}
+            >
               <Clock className="w-3.5 h-3.5" />
-              {order.paymentStatus === 'PENDING'
-                ? 'Aguardando Pagamento'
-                : order.paymentStatus}
+              {order.paymentStatus === 'PAID'
+                ? 'Pago'
+                : order.paymentStatus === 'PENDING'
+                  ? 'Aguardando Pagamento'
+                  : order.paymentStatus}
             </span>
           </div>
 
