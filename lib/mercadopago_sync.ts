@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client'
 import { MercadoPagoConfig, Payment } from 'mercadopago'
 import { prisma } from '@/lib/prisma'
 
@@ -11,7 +12,6 @@ function isMadeToOrderProduct(product: {
 } & Record<string, unknown>): boolean {
   if (product.isMadeToOrder === true) return true
   if (product.category.toLowerCase().includes('encomenda')) return true
-  if (product.stock <= 0) return true
   return false
 }
 
@@ -20,16 +20,21 @@ function isMadeToOrderProduct(product: {
  *
  * Regras (Documento-Mestre D02 a D07):
  * - Verifica idempotência em PaymentWebhookLog pelo ID do pagamento (eventId @unique).
+ * - Valida que externalReference coincide obrigatoriamente com order.id do banco.
+ * - Valida integridade financeira (transaction_amount contra order.totalAmount em Prisma.Decimal).
  * - Atualiza Order.paymentStatus para 'PAID'.
- * - Para itens de Pronta Entrega, efetua a baixa atômica de stock.
+ * - Para itens de Pronta Entrega, efetua a baixa atômica condicional de stock (produto ou variante).
  * - Para itens Sob Encomenda, não altera o estoque (vai para a fila de produção no Admin).
  */
 export async function confirmApprovedPaymentInDb(params: {
   orderId: string
   paymentId: string
+  externalReference: string
+  transactionAmount: number | string | Prisma.Decimal | null | undefined
 }): Promise<{ confirmed: boolean; alreadyProcessed: boolean }> {
-  const { orderId, paymentId } = params
+  const { orderId, paymentId, externalReference, transactionAmount } = params
   const cleanPaymentId = String(paymentId).trim()
+  const cleanExternalRef = String(externalReference || '').trim()
 
   return prisma.$transaction(async (tx) => {
     // 1. Idempotência: verificar se o pagamento já foi processado no PaymentWebhookLog
@@ -59,10 +64,41 @@ export async function confirmApprovedPaymentInDb(params: {
     })
 
     if (!order) {
-      return { confirmed: false, alreadyProcessed: false }
+      throw new Error(`Pedido "${orderId}" não encontrado no banco de dados.`)
     }
 
-    // 2. Registrar evento no PaymentWebhookLog
+    // 2. Validação obrigatória de external_reference contra order.id do banco
+    if (!cleanExternalRef || cleanExternalRef !== order.id) {
+      console.error(
+        `[SEGURANÇA FINANCEIRA] external_reference divergente para o pagamento ${cleanPaymentId}: esperado "${order.id}", recebido "${cleanExternalRef}".`
+      )
+      throw new Error(
+        'O external_reference do pagamento não coincide com o ID do pedido no banco.'
+      )
+    }
+
+    // 3. Validação obrigatória do valor pago (transaction_amount) contra order.totalAmount
+    if (transactionAmount === undefined || transactionAmount === null) {
+      throw new Error(
+        `Valor do pagamento (transaction_amount) ausente para o pedido "${order.id}".`
+      )
+    }
+
+    const paidDecimal =
+      transactionAmount instanceof Prisma.Decimal
+        ? transactionAmount
+        : new Prisma.Decimal(Number(transactionAmount).toFixed(2))
+
+    if (!paidDecimal.isFinite() || !paidDecimal.equals(order.totalAmount)) {
+      console.error(
+        `[SEGURANÇA FINANCEIRA] Divergência de transaction_amount no pedido ${order.id}: esperado ${order.totalAmount.toFixed(2)}, recebido ${paidDecimal.toFixed(2)}.`
+      )
+      throw new Error(
+        `Valor pago (${paidDecimal.toFixed(2)}) diverge do total do pedido (${order.totalAmount.toFixed(2)}).`
+      )
+    }
+
+    // 4. Registrar evento no PaymentWebhookLog
     await tx.paymentWebhookLog.create({
       data: {
         eventId: cleanPaymentId,
@@ -74,7 +110,7 @@ export async function confirmApprovedPaymentInDb(params: {
       return { confirmed: false, alreadyProcessed: true }
     }
 
-    // 3. Atualizar Order para PAID
+    // 5. Atualizar Order para PAID
     await tx.order.update({
       where: { id: order.id },
       data: {
@@ -82,7 +118,7 @@ export async function confirmApprovedPaymentInDb(params: {
       },
     })
 
-    // 4. Iterar sobre os OrderItems: baixar estoque apenas de Pronta Entrega
+    // 6. Iterar sobre os OrderItems: baixar estoque apenas de Pronta Entrega
     for (const item of order.items) {
       const productRecord = item.product as {
         id: string
@@ -95,24 +131,34 @@ export async function confirmApprovedPaymentInDb(params: {
         continue
       }
 
-      if (item.variantId && item.variant) {
-        if (item.variant.stock >= item.quantity) {
-          const updatedVariant = await tx.variant.updateMany({
-            where: {
-              id: item.variantId,
-              stock: { gte: item.quantity },
-            },
-            data: {
-              stock: { decrement: item.quantity },
-            },
-          })
-          if (updatedVariant.count === 0) {
-            throw new Error(
-              `Estoque insuficiente para baixa da variante do item "${item.productTitle}".`
-            )
-          }
+      if (item.variantId) {
+        if (!item.variant || item.variant.stock < item.quantity) {
+          throw new Error(
+            `Estoque insuficiente para a variante "${item.variantId}" do item "${item.productTitle}" (disponível: ${item.variant?.stock ?? 0}, solicitado: ${item.quantity}).`
+          )
+        }
+
+        const updatedVariant = await tx.variant.updateMany({
+          where: {
+            id: item.variantId,
+            stock: { gte: item.quantity },
+          },
+          data: {
+            stock: { decrement: item.quantity },
+          },
+        })
+        if (updatedVariant.count === 0) {
+          throw new Error(
+            `Estoque insuficiente para baixa da variante "${item.variantId}" do item "${item.productTitle}".`
+          )
         }
       } else {
+        if (item.product.stock < item.quantity) {
+          throw new Error(
+            `Estoque insuficiente para o item "${item.productTitle}" (disponível: ${item.product.stock}, solicitado: ${item.quantity}).`
+          )
+        }
+
         const updatedProduct = await tx.product.updateMany({
           where: {
             id: item.productId,
@@ -149,6 +195,19 @@ export async function syncOrderWithMercadoPago(
   }
 
   try {
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: { id: true, totalAmount: true, paymentStatus: true },
+    })
+
+    if (!order) {
+      return { isPaid: false, status: 'pending' }
+    }
+
+    if (order.paymentStatus === 'PAID') {
+      return { isPaid: true, status: 'approved' }
+    }
+
     const mpConfig = new MercadoPagoConfig({
       accessToken,
       options: { timeout: 15000 },
@@ -157,38 +216,50 @@ export async function syncOrderWithMercadoPago(
 
     if (paymentId) {
       const mpPayment = await paymentClient.get({ id: String(paymentId) })
-      const refOrderId = String(
-        mpPayment.external_reference ||
-          (mpPayment.metadata as Record<string, unknown> | undefined)?.order_id ||
-          ''
-      ).trim()
+      const externalReference = String(mpPayment.external_reference || '').trim()
 
-      if (refOrderId === orderId && mpPayment.status === 'approved' && mpPayment.id) {
+      if (externalReference !== order.id) {
+        console.error(
+          `[SEGURANÇA FINANCEIRA] Sync rejeitado: external_reference "${externalReference}" difere de order.id "${order.id}".`
+        )
+        return { isPaid: false, status: mpPayment.status || 'pending' }
+      }
+
+      if (mpPayment.status === 'approved' && mpPayment.id) {
         await confirmApprovedPaymentInDb({
-          orderId,
+          orderId: order.id,
           paymentId: String(mpPayment.id),
+          externalReference,
+          transactionAmount: mpPayment.transaction_amount,
         })
         return { isPaid: true, status: 'approved' }
       }
       return {
-        isPaid: mpPayment.status === 'approved',
+        isPaid: false,
         status: mpPayment.status || 'pending',
       }
     }
 
     const searchResult = await paymentClient.search({
       options: {
-        external_reference: orderId,
+        external_reference: order.id,
       },
     })
 
     const results = searchResult.results || []
-    const approvedPayment = results.find((p) => p.status === 'approved' && p.id)
+    const approvedPayment = results.find(
+      (p) =>
+        p.status === 'approved' &&
+        p.id &&
+        String(p.external_reference || '').trim() === order.id
+    )
 
     if (approvedPayment && approvedPayment.id) {
       await confirmApprovedPaymentInDb({
-        orderId,
+        orderId: order.id,
         paymentId: String(approvedPayment.id),
+        externalReference: String(approvedPayment.external_reference || '').trim(),
+        transactionAmount: approvedPayment.transaction_amount,
       })
       return { isPaid: true, status: 'approved' }
     }

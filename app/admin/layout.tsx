@@ -1,11 +1,14 @@
 import Link from 'next/link'
 import React from 'react'
+import { requireAdmin } from '@/lib/auth'
 
-export default function AdminLayout({
+export default async function AdminLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  await requireAdmin()
+
   return (
     <div className="flex min-h-screen bg-[#050811] text-slate-100 font-sans">
       {/* Sidebar Única */}

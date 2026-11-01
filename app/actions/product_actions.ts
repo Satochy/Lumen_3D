@@ -1,5 +1,7 @@
 'use server'
 
+import { z } from 'zod'
+import { Prisma } from '@prisma/client'
 import { requireAdmin } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
@@ -16,6 +18,28 @@ export type FormState = {
 
 // Limite da coluna Decimal(10, 2)
 const MAX_PRICE = 99999999.99
+
+const productFieldsSchema = z.object({
+  title: z.string().trim().min(1, 'Informe o título do produto.'),
+  description: z.string().trim(),
+  category: z.string().trim().default('Geral'),
+  price: z
+    .number({ message: 'Preço inválido.' })
+    .finite('Preço inválido.')
+    .nonnegative('Preço inválido.')
+    .max(MAX_PRICE, 'Preço inválido.'),
+  stock: z
+    .number({ message: 'Estoque inválido.' })
+    .int('Estoque inválido.')
+    .nonnegative('Estoque inválido.'),
+  weightGrams: z
+    .number({ message: 'Peso inválido.' })
+    .finite('Peso inválido.')
+    .nonnegative('Peso inválido.')
+    .nullable(),
+  dimensions: z.string().trim().nullable(),
+  isFeatured: z.boolean(),
+})
 
 function slugify(text: string) {
   return text
@@ -45,7 +69,7 @@ type ParsedProductData = {
   title: string
   description: string
   category: string
-  price: number
+  price: Prisma.Decimal
   stock: number
   weightGrams: number | null
   dimensions: string | null
@@ -57,22 +81,34 @@ function parseFields(formData: FormData): { error?: string; data?: ParsedProduct
   const description = String(formData.get('description') ?? '').trim()
   const category = String(formData.get('category') ?? '').trim() || 'Geral'
   const rawPrice = parseFloat(String(formData.get('price') ?? '').replace(',', '.'))
-  const price = Math.round(rawPrice * 100) / 100
+  const priceNumber = Math.round(rawPrice * 100) / 100
   const stock = parseInt(String(formData.get('stock') ?? ''), 10)
   const rawWeight = String(formData.get('weightGrams') ?? '').replace(',', '.').trim()
   const weightGrams = rawWeight ? parseFloat(rawWeight) : null
   const dimensions = String(formData.get('dimensions') ?? '').trim() || null
   const isFeatured = formData.get('isFeatured') === 'on'
 
-  if (!title) return { error: 'Informe o título do produto.' }
-  if (!Number.isFinite(price) || price < 0 || price > MAX_PRICE) return { error: 'Preço inválido.' }
-  if (!Number.isInteger(stock) || stock < 0) return { error: 'Estoque inválido.' }
-  if (weightGrams !== null && (!Number.isFinite(weightGrams) || weightGrams < 0)) {
-    return { error: 'Peso inválido.' }
+  const parsed = productFieldsSchema.safeParse({
+    title,
+    description,
+    category,
+    price: priceNumber,
+    stock,
+    weightGrams,
+    dimensions,
+    isFeatured,
+  })
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message || 'Dados inválidos.' }
   }
 
   return {
-    data: { title, description, category, price, stock, weightGrams, dimensions, isFeatured },
+    data: {
+      ...parsed.data,
+      category: parsed.data.category || 'Geral',
+      price: new Prisma.Decimal(parsed.data.price.toFixed(2)),
+    },
   }
 }
 
@@ -85,7 +121,7 @@ function revalidateStore(slug?: string) {
 }
 
 export async function createProductAction(
-  _prev: any,
+  _prev: unknown,
   formData: FormData
 ): Promise<FormState> {
   await requireAdmin()
@@ -96,7 +132,7 @@ export async function createProductAction(
   const data = parsed.data
 
   const files = getNewFiles(formData)
-  const fileError = validateImageFiles(files, 0)
+  const fileError = await validateImageFiles(files, 0)
   if (fileError) return { error: fileError }
 
   const base = slugify(String(formData.get('slug') ?? '') || data.title)
@@ -119,7 +155,7 @@ export async function createProductAction(
 
 export async function updateProductAction(
   id: string,
-  _prev: any,
+  _prev: unknown,
   formData: FormData
 ): Promise<FormState> {
   await requireAdmin()
@@ -139,7 +175,7 @@ export async function updateProductAction(
   const removed = current.images.filter((url) => !kept.includes(url))
 
   const files = getNewFiles(formData)
-  const fileError = validateImageFiles(files, kept.length)
+  const fileError = await validateImageFiles(files, kept.length)
   if (fileError) return { error: fileError }
 
   let uploaded: string[] = []

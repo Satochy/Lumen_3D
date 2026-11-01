@@ -20,7 +20,6 @@ export default function Scroll_Reveal() {
         entries.forEach((entry) => {
           const el = entry.target as HTMLElement
           if (entry.isIntersecting) {
-            console.log('✨ [Scroll_Reveal] A revelar secção:', el.id || 'secção')
             el.dataset.revealState = 'shown'
           } else {
             el.dataset.revealState = 'hidden'

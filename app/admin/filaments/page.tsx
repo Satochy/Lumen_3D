@@ -1,6 +1,9 @@
+import { requireAdmin } from '@/lib/auth'
 import { getFilaments, createFilament } from '@/app/actions/filaments'
 
 export default async function FilamentsPage() {
+  await requireAdmin()
+
   const result = await getFilaments()
   const filaments = result.success ? result.data : []
 

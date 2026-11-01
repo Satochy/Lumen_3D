@@ -11,6 +11,46 @@ const EXTENSIONS: Record<string, string> = {
   'image/webp': 'webp',
 }
 
+/**
+ * Valida a assinatura binária (magic bytes) do cabeçalho do arquivo
+ * para impedir upload de arquivos maliciosos com extensão/MIME falsificados.
+ */
+export async function hasValidImageSignature(file: File): Promise<boolean> {
+  if (file.size < 12) return false
+  const buffer = new Uint8Array(await file.slice(0, 12).arrayBuffer())
+
+  // JPEG: FF D8 FF
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+    return file.type === 'image/jpeg'
+  }
+
+  // PNG: 89 50 4E 47 0D 0A 1A 0A
+  if (
+    buffer[0] === 0x89 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x4e &&
+    buffer[3] === 0x47
+  ) {
+    return file.type === 'image/png'
+  }
+
+  // WEBP: RIFF....WEBP
+  if (
+    buffer[0] === 0x52 &&
+    buffer[1] === 0x49 &&
+    buffer[2] === 0x46 &&
+    buffer[3] === 0x46 &&
+    buffer[8] === 0x57 &&
+    buffer[9] === 0x45 &&
+    buffer[10] === 0x42 &&
+    buffer[11] === 0x50
+  ) {
+    return file.type === 'image/webp'
+  }
+
+  return false
+}
+
 function getBucket() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const key = process.env.SUPABASE_SECRET_KEY
@@ -24,8 +64,11 @@ function getBucket() {
   )
 }
 
-/** Retorna uma mensagem de erro, ou null se os arquivos forem válidos. */
-export function validateImageFiles(files: File[], alreadyKept: number): string | null {
+/** Retorna uma mensagem de erro, ou null se os arquivos forem válidos (MIME, tamanho e magic bytes). */
+export async function validateImageFiles(
+  files: File[],
+  alreadyKept: number
+): Promise<string | null> {
   if (alreadyKept + files.length > MAX_IMAGES) {
     return `Máximo de ${MAX_IMAGES} fotos por produto.`
   }
@@ -36,6 +79,10 @@ export function validateImageFiles(files: File[], alreadyKept: number): string |
     }
     if (file.size > MAX_IMAGE_BYTES) {
       return `"${file.name}" passa de ${MAX_IMAGE_BYTES / 1024 / 1024} MB.`
+    }
+    const validSignature = await hasValidImageSignature(file)
+    if (!validSignature) {
+      return `"${file.name}": o conteúdo binário do arquivo não corresponde a uma imagem JPG, PNG ou WebP válida.`
     }
   }
 
@@ -51,6 +98,11 @@ export async function uploadProductImages(files: File[]): Promise<string[]> {
 
   try {
     for (const file of files) {
+      const validSignature = await hasValidImageSignature(file)
+      if (!validSignature) {
+        throw new Error(`Assinatura binária inválida para o arquivo "${file.name}".`)
+      }
+
       const path = `products/${randomUUID()}.${EXTENSIONS[file.type]}`
       const buffer = Buffer.from(await file.arrayBuffer())
 

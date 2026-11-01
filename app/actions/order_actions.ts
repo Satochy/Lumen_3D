@@ -641,6 +641,8 @@ export async function processOrderPaymentAction(
       await confirmApprovedPaymentInDb({
         orderId: order.id,
         paymentId: mpPaymentId,
+        externalReference: String(paymentResponse.external_reference || '').trim(),
+        transactionAmount: paymentResponse.transaction_amount,
       })
 
       revalidatePath(`/marketplace/checkout/${order.id}`)

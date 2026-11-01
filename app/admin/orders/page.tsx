@@ -1,5 +1,6 @@
 import type { PaymentStatus, LogisticsStatus } from '@prisma/client'
-import { getOrders, updateLogisticsStatus, updatePaymentStatus } from '@/app/actions/orders'
+import { requireAdmin } from '@/lib/auth'
+import { getOrders, updateLogisticsStatus } from '@/app/actions/orders'
 import { formatCurrency } from '@/lib/format_currency'
 
 const paymentBadges: Record<PaymentStatus, { label: string; style: string }> = {
@@ -18,10 +19,11 @@ const logisticsBadges: Record<LogisticsStatus, { label: string; style: string }>
   CANCELLED: { label: 'Cancelado', style: 'bg-red-500/10 text-red-400 border-red-500/20' },
 }
 
-const paymentOptions = Object.keys(paymentBadges) as PaymentStatus[]
 const logisticsOptions = Object.keys(logisticsBadges) as LogisticsStatus[]
 
 export default async function OrdersPage() {
+  await requireAdmin()
+
   const result = await getOrders()
   const orders = result.success ? result.data : []
 
@@ -30,7 +32,7 @@ export default async function OrdersPage() {
       <div>
         <h1 className="text-2xl font-bold">Fila de Produção & Pedidos</h1>
         <p className="text-slate-400 text-sm">
-          Acompanhe os pedidos, gerencie pagamentos e o estado das impressões.
+          Acompanhe os pedidos, visualize os pagamentos confirmados e gerencie o estado das impressões.
         </p>
       </div>
 
@@ -56,20 +58,14 @@ export default async function OrdersPage() {
                     </p>
                   </div>
 
-                  <div className="flex flex-col gap-3">
-                    {/* Status de Pagamento */}
-                    <form action={updatePaymentStatus} className="flex items-center gap-2">
-                      <input type="hidden" name="orderId" value={order.id} />
-                      <span className={`px-2 py-1 text-[10px] uppercase font-bold border rounded-md w-32 text-center ${payBadge.style}`}>
+                  <div className="flex flex-col items-end gap-3">
+                    {/* Status de Pagamento (Somente leitura — gerido exclusivamente via Mercado Pago) */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-slate-400">Pagamento:</span>
+                      <span className={`px-2.5 py-1 text-[10px] uppercase font-bold border rounded-md text-center ${payBadge.style}`}>
                         {payBadge.label}
                       </span>
-                      <select name="paymentStatus" defaultValue={order.paymentStatus} className="bg-slate-950 border border-slate-800 text-xs text-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:border-amber-500">
-                        {paymentOptions.map((status) => (
-                          <option key={status} value={status}>{paymentBadges[status].label}</option>
-                        ))}
-                      </select>
-                      <button type="submit" className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-xs font-medium rounded-lg transition">Mudar</button>
-                    </form>
+                    </div>
 
                     {/* Status de Logística */}
                     <form action={updateLogisticsStatus} className="flex items-center gap-2">
@@ -94,7 +90,7 @@ export default async function OrdersPage() {
                     {order.items.map((item) => (
                       <li key={item.id} className="py-2 flex justify-between items-center text-sm">
                         <div>
-                          <span className="font-medium text-slate-200">{item.product.title}</span>
+                          <span className="font-medium text-slate-200">{item.productTitle || item.product.title}</span>
                           <span className="text-xs text-slate-400 ml-2">x{item.quantity}</span>
                         </div>
                         <span className="text-xs text-slate-400">
@@ -103,6 +99,15 @@ export default async function OrdersPage() {
                       </li>
                     ))}
                   </ul>
+                </div>
+
+                <div className="pt-3 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
+                  <span>
+                    Frete: <strong className="text-slate-200">{formatCurrency(order.shippingCost.toNumber())}</strong>
+                  </span>
+                  <span className="text-sm font-bold text-cyan-400">
+                    Total: {formatCurrency(order.totalAmount.toNumber())}
+                  </span>
                 </div>
               </div>
             )

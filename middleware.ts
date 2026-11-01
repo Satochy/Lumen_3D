@@ -7,6 +7,12 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // Protege rotas específicas (/admin/*) e página de login
-  matcher: ['/admin/:path*', '/login/:path*', '/register/:path*'],
+  // Protege rotas autenticadas (/admin, /profile, /marketplace/checkout) e páginas de autenticação
+  matcher: [
+    '/admin/:path*',
+    '/profile/:path*',
+    '/marketplace/checkout/:path*',
+    '/login/:path*',
+    '/register/:path*',
+  ],
 }

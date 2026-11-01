@@ -1,12 +1,19 @@
 'use server'
 
+import { z } from 'zod'
 import { requireAdmin } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-// Certifique-se de que PaymentStatus e LogisticsStatus existem no seu schema.prisma
-import { PaymentStatus, LogisticsStatus } from '@prisma/client'
+import { LogisticsStatus } from '@prisma/client'
 import { revalidatePath } from 'next/cache'
 
+const updateLogisticsSchema = z.object({
+  orderId: z.string().uuid('ID do pedido inválido.'),
+  logisticsStatus: z.nativeEnum(LogisticsStatus),
+})
+
 export async function getOrders() {
+  await requireAdmin()
+
   try {
     const orders = await prisma.order.findMany({
       include: {
@@ -26,10 +33,16 @@ export async function getOrders() {
 }
 
 export async function updateLogisticsStatus(formData: FormData): Promise<void> {
-  const orderId = String(formData.get('orderId') ?? '')
-  const logisticsStatus = String(formData.get('logisticsStatus') ?? '') as LogisticsStatus
+  await requireAdmin()
 
-  if (!orderId) return
+  const parsed = updateLogisticsSchema.safeParse({
+    orderId: formData.get('orderId'),
+    logisticsStatus: formData.get('logisticsStatus'),
+  })
+
+  if (!parsed.success) return
+
+  const { orderId, logisticsStatus } = parsed.data
 
   try {
     await prisma.order.update({
@@ -43,24 +56,5 @@ export async function updateLogisticsStatus(formData: FormData): Promise<void> {
 
   revalidatePath('/admin/orders')
   revalidatePath('/admin')
-}
-
-export async function updatePaymentStatus(formData: FormData): Promise<void> {
-  const orderId = String(formData.get('orderId') ?? '')
-  const paymentStatus = String(formData.get('paymentStatus') ?? '') as PaymentStatus
-
-  if (!orderId) return
-
-  try {
-    await prisma.order.update({
-      where: { id: orderId },
-      data: { paymentStatus },
-    })
-  } catch (error) {
-    console.error('Erro ao atualizar status de pagamento:', orderId, error)
-    return
-  }
-
-  revalidatePath('/admin/orders')
-  revalidatePath('/admin')
+  revalidatePath('/profile/orders')
 }

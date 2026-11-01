@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { requireAdmin } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { updateProductAction } from '@/app/actions/product_actions'
 import Product_Form from '@/components/admin/Product_Form'
@@ -9,6 +10,8 @@ interface EditProductPageProps {
 }
 
 export default async function EditProductPage({ params }: EditProductPageProps) {
+  await requireAdmin()
+
   const { id } = await params
   const rawProduct = await prisma.product.findUnique({ where: { id } })
 

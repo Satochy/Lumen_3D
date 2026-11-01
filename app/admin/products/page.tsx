@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { requireAdmin } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { formatCurrency } from '@/lib/format_currency'
 import {
@@ -10,6 +11,8 @@ import {
 import Product_Form from '@/components/admin/Product_Form'
 
 export default async function AdminProductsPage() {
+  await requireAdmin()
+
   // O admin enxerga tudo, inclusive arquivados. _count indica se o produto já foi vendido.
   const products = await prisma.product.findMany({
     orderBy: { createdAt: 'desc' },

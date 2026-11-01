@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { createHmac, timingSafeEqual } from 'crypto'
+import { Prisma } from '@prisma/client'
 import { MercadoPagoConfig, Payment } from 'mercadopago'
 import { prisma } from '@/lib/prisma'
 import { confirmApprovedPaymentInDb } from '@/lib/mercadopago_sync'
@@ -51,9 +52,11 @@ function verifyMercadoPagoSignature(
  * 1. Valida o payload recebido e extrai o ID do pagamento.
  * 2. Verifica idempotência em PaymentWebhookLog pelo ID do pagamento; se já processado, retorna 200 OK.
  * 3. Consulta a API oficial do Mercado Pago (MERCADOPAGO_ACCESS_TOKEN) para confirmar se status === 'approved'.
- * 4. Em prisma.$transaction: registra o PaymentWebhookLog, atualiza a Order para PAID e baixa o stock
- *    dos itens de Pronta Entrega (mantendo itens Sob Encomenda sem baixa para a fila de produção).
- * 5. Retorna HTTP 200 OK ao Mercado Pago.
+ * 4. Valida obrigatoriamente que external_reference coincide com order.id no banco e que transaction_amount
+ *    coincide com order.totalAmount em Prisma.Decimal.
+ * 5. Em prisma.$transaction: registra o PaymentWebhookLog, atualiza a Order para PAID e baixa o stock
+ *    dos itens de Pronta Entrega (incluindo falha explícita se variante não tiver estoque suficiente).
+ * 6. Retorna HTTP 200 OK ao Mercado Pago.
  */
 export async function POST(request: NextRequest) {
   const accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN
@@ -118,31 +121,70 @@ export async function POST(request: NextRequest) {
     const paymentClient = new Payment(mpConfig)
     const mpPayment = await paymentClient.get({ id: paymentId })
 
-    const orderId = String(
-      mpPayment.external_reference ||
-        (mpPayment.metadata as Record<string, unknown> | undefined)?.order_id ||
-        ''
-    ).trim()
-
-    if (!orderId) {
+    const externalReference = String(mpPayment.external_reference || '').trim()
+    if (!externalReference) {
+      console.error(
+        `Webhook Mercado Pago: pagamento ${paymentId} sem external_reference.`
+      )
       return NextResponse.json({ received: true }, { status: 200 })
     }
 
-    // 4. Atualização transacional (Order -> PAID + baixa de estoque Pronta Entrega + PaymentWebhookLog)
+    // 4. Validar que o pedido existe no banco e que external_reference coincide obrigatoriamente com order.id
+    const order = await prisma.order.findUnique({
+      where: { id: externalReference },
+      select: { id: true, totalAmount: true },
+    })
+
+    if (!order || order.id !== externalReference) {
+      console.error(
+        `Webhook Mercado Pago: pedido não encontrado para external_reference "${externalReference}".`
+      )
+      return NextResponse.json({ error: 'Pedido não encontrado.' }, { status: 400 })
+    }
+
+    // 5. Validar transaction_amount contra order.totalAmount quando aprovado
     if (mpPayment.status === 'approved') {
+      if (
+        mpPayment.transaction_amount === undefined ||
+        mpPayment.transaction_amount === null
+      ) {
+        console.error(
+          `Webhook Mercado Pago: transaction_amount ausente no pagamento ${paymentId}.`
+        )
+        return NextResponse.json(
+          { error: 'Valor de transação ausente.' },
+          { status: 400 }
+        )
+      }
+
+      const paidDecimal = new Prisma.Decimal(
+        Number(mpPayment.transaction_amount).toFixed(2)
+      )
+      if (!paidDecimal.isFinite() || !paidDecimal.equals(order.totalAmount)) {
+        console.error(
+          `Webhook Mercado Pago: divergência financeira no pedido ${order.id} (esperado: ${order.totalAmount.toFixed(2)}, pago: ${paidDecimal.toFixed(2)}).`
+        )
+        return NextResponse.json(
+          { error: 'Valor pago diverge do total do pedido.' },
+          { status: 400 }
+        )
+      }
+
       await confirmApprovedPaymentInDb({
-        orderId,
+        orderId: order.id,
         paymentId,
+        externalReference,
+        transactionAmount: paidDecimal,
       })
 
-      revalidatePath(`/marketplace/checkout/${orderId}`)
+      revalidatePath(`/marketplace/checkout/${order.id}`)
       revalidatePath('/profile/orders')
       revalidatePath('/admin/orders')
       revalidatePath('/admin')
       revalidatePath('/marketplace')
     }
 
-    // 5. Retornar HTTP 200 ao Mercado Pago
+    // 6. Retornar HTTP 200 ao Mercado Pago
     return NextResponse.json({ received: true }, { status: 200 })
   } catch (error) {
     console.error('Erro no processamento do webhook Mercado Pago:', error)
