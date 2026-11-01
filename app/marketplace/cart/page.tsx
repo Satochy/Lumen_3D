@@ -1,13 +1,14 @@
 import { Header, Footer } from '@/components/layout'
 import { getCurrentUser } from '@/lib/auth'
 import Cart_Page_Client from '@/components/cart/Cart_Page_Client'
+import Cart_Button from '@/components/cart/Cart_Button'
 
 export default async function CartPage() {
   const user = await getCurrentUser()
 
   return (
     <div className="min-h-screen bg-[#050811] text-slate-100 flex flex-col font-sans">
-      <Header user={user} logoHref="/">
+      <Header user={user} logoHref="/" actions={<Cart_Button />}>
         <div className="hidden md:flex items-center gap-3 text-xs font-bold tracking-wider uppercase">
           <span className="text-cyan-400 border-b-2 border-cyan-400 pb-1">Carrinho</span>
           <span className="text-slate-600">---------</span>

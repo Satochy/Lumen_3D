@@ -75,8 +75,11 @@ export default async function UserOrdersPage() {
             {orders.map((order) => {
               const payBadge = paymentLabels[order.paymentStatus]
               const logBadge = logisticsLabels[order.logisticsStatus]
-              const totalWithShipping =
-                Number(order.totalAmount) + Number(order.shippingCost)
+              const itemsSubtotal = order.items.reduce(
+                (acc, item) => acc + Number(item.priceUnit) * item.quantity,
+                0
+              )
+              const totalWithShipping = itemsSubtotal + Number(order.shippingCost)
 
               return (
                 <div
@@ -104,6 +107,14 @@ export default async function UserOrdersPage() {
                       >
                         {logBadge.label}
                       </span>
+                      {order.paymentStatus === 'PENDING' && (
+                        <Link
+                          href={`/marketplace/checkout/${order.id}`}
+                          className="px-3 py-1 text-[11px] font-bold rounded-md bg-cyan-500 hover:bg-cyan-400 text-slate-950 transition"
+                        >
+                          Pagar Agora
+                        </Link>
+                      )}
                     </div>
                   </div>
 
