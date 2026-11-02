@@ -42,9 +42,37 @@ export async function calculateShippingAction(
     return { options: [], error: 'CEP inválido. Digite um CEP com 8 dígitos.' }
   }
 
-  // 2. Validar Itens
+  // 2. Validar Itens e quantidades inteiras seguras
   if (!items || items.length === 0) {
     return { options: [], error: 'Carrinho vazio.' }
+  }
+
+  for (const item of items) {
+    if (!Number.isSafeInteger(item.quantity) || item.quantity < 1) {
+      return {
+        options: [],
+        error: 'Quantidade inválida para cálculo de frete.',
+      }
+    }
+    if (
+      item.weightGrams === undefined ||
+      item.weightGrams === null ||
+      !Number.isFinite(item.weightGrams) ||
+      item.weightGrams <= 0
+    ) {
+      return {
+        options: [],
+        error:
+          'Um ou mais produtos estão sem peso físico válido configurado para cálculo de frete.',
+      }
+    }
+    if (!item.dimensions || typeof item.dimensions !== 'string' || !item.dimensions.trim()) {
+      return {
+        options: [],
+        error:
+          'Um ou mais produtos estão sem dimensões físicas configuradas para cálculo de frete.',
+      }
+    }
   }
 
   const options: ShippingOption[] = []

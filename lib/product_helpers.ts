@@ -7,7 +7,13 @@ import type { Prisma, Product } from '@prisma/client'
 export const activeProducts = { archivedAt: null } satisfies Prisma.ProductWhereInput
 
 /** Produto com o preço já convertido para number, seguro para Client Components. */
-export type PublicProduct = Omit<Product, 'price'> & { price: number }
+export type PublicProduct = Omit<Product, 'price'> & {
+  price: number
+  reservedStock: number
+  availableStock: number
+  isMadeToOrder: boolean
+  productionDays: number | null
+}
 
 /**
  * Prisma.Decimal não pode ser passado a Client Components nem gravado no
@@ -15,5 +21,14 @@ export type PublicProduct = Omit<Product, 'price'> & { price: number }
  * interface. Contas com dinheiro continuam sendo feitas no servidor, em Decimal.
  */
 export function serializeProduct(product: Product): PublicProduct {
-  return { ...product, price: product.price.toNumber() }
+  const reservedStock = product.reservedStock ?? 0
+  const availableStock = Math.max(0, product.stock - reservedStock)
+  return {
+    ...product,
+    price: product.price.toNumber(),
+    reservedStock,
+    availableStock,
+    isMadeToOrder: Boolean(product.isMadeToOrder),
+    productionDays: product.productionDays ?? null,
+  }
 }

@@ -4,16 +4,12 @@ import { prisma } from '@/lib/prisma'
 
 /**
  * Identifica se um produto/item é Sob Encomenda (não baixa estoque físico pronto)
- * ou Pronta Entrega (baixa estoque físico em stock).
+ * ou Pronta Entrega (baixa estoque físico em stock) usando exclusivamente o campo explícito isMadeToOrder.
  */
-function isMadeToOrderProduct(product: {
-  category: string
-  stock: number
-  isMadeToOrder?: boolean
-}): boolean {
-  if (product.isMadeToOrder === true) return true
-  if (product.category.toLowerCase().includes('encomenda')) return true
-  return false
+function isMadeToOrderProduct(product?: {
+  isMadeToOrder?: boolean | null
+} | null): boolean {
+  return Boolean(product?.isMadeToOrder)
 }
 
 /**
@@ -115,21 +111,19 @@ export async function confirmApprovedPaymentInDb(params: {
       )
     }
 
-    const hasMadeToOrderItem = order.items.some(
-      (item) =>
-        item.isMadeToOrder ||
-        !item.productId ||
-        !item.product ||
-        isMadeToOrderProduct(item.product)
+    const hasMadeToOrderItem = order.items.some((item) =>
+      Boolean(item.isMadeToOrder || isMadeToOrderProduct(item.product))
     )
 
-    // 4. Atualizar Order para PAID de forma atômica condicional (proteção contra Race Condition)
+    // 4. Atualizar Order para PAID de forma atômica condicional (proteção contra Race Condition e transição inválida)
+    // Exige paymentStatus === 'PENDING' e logisticsStatus !== 'CANCELLED'.
     // Regra D06/D07: Pedido somente de Pronta Entrega vai para READY_FOR_SHIPPING;
     // pedido com item Sob Encomenda permanece na fila de produção (PREPARING).
     const result = await tx.order.updateMany({
       where: {
         id: order.id,
-        paymentStatus: { not: 'PAID' },
+        paymentStatus: 'PENDING',
+        logisticsStatus: { not: 'CANCELLED' },
       },
       data: {
         paymentStatus: 'PAID',
@@ -155,12 +149,11 @@ export async function confirmApprovedPaymentInDb(params: {
 
     // 6. Iterar sobre os OrderItems: baixar estoque apenas de Pronta Entrega
     for (const item of order.items) {
-      if (
-        item.isMadeToOrder ||
-        !item.productId ||
-        !item.product ||
-        isMadeToOrderProduct(item.product)
-      ) {
+      const isItemMadeToOrder = Boolean(
+        item.isMadeToOrder || isMadeToOrderProduct(item.product)
+      )
+
+      if (isItemMadeToOrder || !item.productId || !item.product) {
         // Produto Sob Encomenda ou item personalizado: não mexe no estoque físico; segue para fila de produção no Admin
         continue
       }

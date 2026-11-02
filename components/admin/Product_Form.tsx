@@ -35,6 +35,9 @@ export default function Product_Form({ action, submitLabel, defaults }: ProductF
   const [state, formAction, isPending] = useActionState(action, undefined)
   const [existing, setExisting] = useState<string[]>(defaults?.images ?? [])
   const [previews, setPreviews] = useState<string[]>([])
+  const [isMadeToOrderChecked, setIsMadeToOrderChecked] = useState<boolean>(
+    defaults?.isMadeToOrder ?? false
+  )
 
   // Libera as URLs temporárias de preview quando a seleção muda ou o form desmonta
   useEffect(() => {
@@ -168,7 +171,8 @@ export default function Product_Form({ action, submitLabel, defaults }: ProductF
             type="checkbox"
             id="isMadeToOrder"
             name="isMadeToOrder"
-            defaultChecked={defaults?.isMadeToOrder ?? false}
+            checked={isMadeToOrderChecked}
+            onChange={(e) => setIsMadeToOrderChecked(e.target.checked)}
             className="mt-0.5 rounded bg-slate-950 border-slate-800 text-cyan-500 focus:ring-0"
           />
           <div>
@@ -182,13 +186,17 @@ export default function Product_Form({ action, submitLabel, defaults }: ProductF
         </div>
 
         <div>
-          <label className={labelCls}>Prazo de Produção Estimado (Dias úteis)</label>
+          <label className={labelCls}>
+            Prazo de Produção Estimado (Dias úteis){isMadeToOrderChecked ? ' *' : ''}
+          </label>
           <input
             name="productionDays"
             type="number"
             min="1"
+            step="1"
+            required={isMadeToOrderChecked}
             defaultValue={defaults?.productionDays ?? undefined}
-            placeholder="Ex: 5 (apenas para Sob Encomenda)"
+            placeholder="Ex: 5 (obrigatório para Sob Encomenda)"
             className={inputCls}
           />
         </div>

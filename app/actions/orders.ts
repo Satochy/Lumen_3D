@@ -47,7 +47,25 @@ export async function updateLogisticsStatus(formData: FormData): Promise<void> {
   try {
     const existingOrder = await prisma.order.findUnique({
       where: { id: orderId },
-      select: { id: true, paymentStatus: true, logisticsStatus: true },
+      select: {
+        id: true,
+        paymentStatus: true,
+        logisticsStatus: true,
+        items: {
+          select: {
+            id: true,
+            productId: true,
+            variantId: true,
+            quantity: true,
+            isMadeToOrder: true,
+            product: {
+              select: {
+                isMadeToOrder: true,
+              },
+            },
+          },
+        },
+      },
     })
 
     if (!existingOrder) {
@@ -65,10 +83,56 @@ export async function updateLogisticsStatus(formData: FormData): Promise<void> {
       return
     }
 
-    await prisma.order.update({
-      where: { id: orderId },
-      data: { logisticsStatus },
-    })
+    // Se o pedido já estava PAID (e não estava CANCELLED) e está sendo alterado para CANCELLED,
+    // devolve atomicamente o estoque apenas dos itens de Pronta Entrega (!isMadeToOrder).
+    if (
+      existingOrder.paymentStatus === 'PAID' &&
+      existingOrder.logisticsStatus !== 'CANCELLED' &&
+      logisticsStatus === 'CANCELLED'
+    ) {
+      await prisma.$transaction(async (tx) => {
+        const updated = await tx.order.updateMany({
+          where: {
+            id: orderId,
+            paymentStatus: 'PAID',
+            logisticsStatus: { not: 'CANCELLED' },
+          },
+          data: {
+            logisticsStatus: 'CANCELLED',
+          },
+        })
+
+        if (updated.count === 0) {
+          return
+        }
+
+        for (const item of existingOrder.items) {
+          const isMadeToOrder = Boolean(
+            item.isMadeToOrder || item.product?.isMadeToOrder
+          )
+          if (isMadeToOrder) {
+            continue
+          }
+
+          if (item.variantId) {
+            await tx.variant.updateMany({
+              where: { id: item.variantId },
+              data: { stock: { increment: item.quantity } },
+            })
+          } else if (item.productId) {
+            await tx.product.updateMany({
+              where: { id: item.productId },
+              data: { stock: { increment: item.quantity } },
+            })
+          }
+        }
+      })
+    } else {
+      await prisma.order.update({
+        where: { id: orderId },
+        data: { logisticsStatus },
+      })
+    }
   } catch (error) {
     console.error('Erro ao atualizar status logístico:', orderId, error)
     return

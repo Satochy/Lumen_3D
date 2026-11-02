@@ -561,10 +561,20 @@ export async function processOrderPaymentAction(
       }
     }
 
-    if (order.paymentStatus === 'PAID') {
+    if (order.logisticsStatus === 'CANCELLED') {
       return {
-        success: true,
-        status: 'approved',
+        success: false,
+        error: 'Este pedido foi cancelado e não pode mais ser pago.',
+      }
+    }
+
+    if (order.paymentStatus !== 'PENDING') {
+      return {
+        success: false,
+        error:
+          order.paymentStatus === 'PAID'
+            ? 'Este pedido já consta como pago.'
+            : 'Este pedido não está mais pendente para pagamento.',
       }
     }
 

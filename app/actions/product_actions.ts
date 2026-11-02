@@ -19,33 +19,49 @@ export type FormState = {
 // Limite da coluna Decimal(10, 2)
 const MAX_PRICE = 99999999.99
 
-const productFieldsSchema = z.object({
-  title: z.string().trim().min(1, 'Informe o título do produto.'),
-  description: z.string().trim(),
-  category: z.string().trim().default('Geral'),
-  price: z
-    .number({ message: 'Preço inválido.' })
-    .finite('Preço inválido.')
-    .nonnegative('Preço inválido.')
-    .max(MAX_PRICE, 'Preço inválido.'),
-  stock: z
-    .number({ message: 'Estoque inválido.' })
-    .int('Estoque inválido.')
-    .nonnegative('Estoque inválido.'),
-  isMadeToOrder: z.boolean().default(false),
-  productionDays: z
-    .number({ message: 'Prazo de produção inválido.' })
-    .int('Prazo de produção inválido.')
-    .positive('O prazo de produção deve ser maior que zero.')
-    .nullable(),
-  weightGrams: z
-    .number({ message: 'Peso inválido.' })
-    .finite('Peso inválido.')
-    .nonnegative('Peso inválido.')
-    .nullable(),
-  dimensions: z.string().trim().nullable(),
-  isFeatured: z.boolean(),
-})
+const productFieldsSchema = z
+  .object({
+    title: z.string().trim().min(1, 'Informe o título do produto.'),
+    description: z.string().trim(),
+    category: z.string().trim().default('Geral'),
+    price: z
+      .number({ message: 'Preço inválido.' })
+      .finite('Preço inválido.')
+      .nonnegative('Preço inválido.')
+      .max(MAX_PRICE, 'Preço inválido.'),
+    stock: z
+      .number({ message: 'Estoque inválido.' })
+      .int('Estoque inválido.')
+      .nonnegative('Estoque inválido.'),
+    isMadeToOrder: z.boolean().default(false),
+    productionDays: z
+      .number({ message: 'Prazo de produção inválido.' })
+      .int('Prazo de produção inválido.')
+      .positive('O prazo de produção deve ser maior que zero.')
+      .nullable(),
+    weightGrams: z
+      .number({ message: 'Peso inválido.' })
+      .finite('Peso inválido.')
+      .nonnegative('Peso inválido.')
+      .nullable(),
+    dimensions: z.string().trim().nullable(),
+    isFeatured: z.boolean(),
+  })
+  .superRefine((data, ctx) => {
+    if (
+      data.isMadeToOrder &&
+      (data.productionDays === null ||
+        !Number.isSafeInteger(data.productionDays) ||
+        data.productionDays < 1)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['productionDays'],
+        message:
+          'Informe o prazo comercial de produção (em dias úteis, mínimo 1) para produtos Sob Encomenda.',
+      })
+    }
+  })
 
 function slugify(text: string) {
   return text

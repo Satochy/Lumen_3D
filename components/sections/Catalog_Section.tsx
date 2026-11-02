@@ -12,6 +12,8 @@ interface Product {
   category: string | null
   images?: string[]
   stock?: number
+  isMadeToOrder?: boolean
+  productionDays?: number | null
   weightGrams?: number | null
   dimensions?: string | null
 }

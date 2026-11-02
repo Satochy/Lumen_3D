@@ -36,6 +36,8 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
   }
 
   const mainImage = product.images?.[0] || '/placeholder.png'
+  const isMadeToOrder = Boolean(product.isMadeToOrder)
+  const availableStock = Math.max(0, product.stock - (product.reservedStock ?? 0))
 
   return (
     <div className="min-h-screen bg-[#050811] text-slate-100 flex flex-col font-sans">
@@ -45,7 +47,6 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-12">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
-          
           {/* Galeria / Imagem do Produto */}
           <div className="bg-slate-900/50 border border-slate-800/80 rounded-2xl p-4 flex items-center justify-center min-h-[400px] lg:min-h-[500px] overflow-hidden relative">
             {product.images && product.images.length > 0 ? (
@@ -65,13 +66,35 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
           {/* Informações e Ações do Produto */}
           <div className="flex flex-col justify-between space-y-6">
             <div>
-              <div className="flex items-center justify-between gap-2 mb-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
                 <span className="bg-cyan-500/10 text-cyan-400 text-xs uppercase font-bold tracking-wider px-3 py-1 rounded-full border border-cyan-500/20">
                   {product.category || 'Geral'}
                 </span>
-                <span className={`text-xs uppercase font-bold px-3 py-1 rounded-full border ${product.stock > 0 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border-rose-500/25'}`}>
-                  {product.stock > 0 ? `${product.stock} em estoque` : 'Esgotado'}
-                </span>
+
+                {isMadeToOrder ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs uppercase font-bold px-3 py-1 rounded-full border bg-amber-500/10 text-amber-400 border-amber-500/20">
+                      Sob Encomenda
+                    </span>
+                    <span className="text-xs font-semibold px-3 py-1 rounded-full border bg-slate-900 text-slate-300 border-slate-800">
+                      {product.productionDays && product.productionDays > 0
+                        ? `Produção estimada: ${product.productionDays} dias úteis`
+                        : 'Prazo de produção a definir (sob consulta)'}
+                    </span>
+                  </div>
+                ) : (
+                  <span
+                    className={`text-xs uppercase font-bold px-3 py-1 rounded-full border ${
+                      availableStock > 0
+                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                        : 'bg-rose-500/10 text-rose-400 border-rose-500/25'
+                    }`}
+                  >
+                    {availableStock > 0
+                      ? `Pronta Entrega (${availableStock} em estoque)`
+                      : 'Esgotado'}
+                  </span>
+                )}
               </div>
 
               <h1 className="text-3xl lg:text-4xl font-extrabold text-white tracking-tight">
@@ -108,10 +131,17 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
             </div>
 
             <div className="pt-6 border-t border-slate-800/80 flex items-center gap-4">
-              <AddToCartButton product={product} />
+              <AddToCartButton
+                product={{
+                  ...product,
+                  stock: product.stock,
+                  reservedStock: product.reservedStock,
+                  isMadeToOrder: product.isMadeToOrder,
+                  productionDays: product.productionDays,
+                }}
+              />
             </div>
           </div>
-
         </div>
       </main>
 
