@@ -23,9 +23,15 @@ export async function getCurrentUser(): Promise<User | null> {
     return null
   }
 
-  const dbUser = await prisma.user.findUnique({
-    where: { email: supabaseUser.email },
+  let dbUser = await prisma.user.findUnique({
+    where: { id: supabaseUser.id },
   })
+
+  if (!dbUser && supabaseUser.email) {
+    dbUser = await prisma.user.findUnique({
+      where: { email: supabaseUser.email },
+    })
+  }
 
   if (!dbUser) {
     return null

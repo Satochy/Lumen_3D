@@ -69,9 +69,15 @@ export default async function AdminProductsPage() {
                       </td>
                       <td className="p-3">{formatCurrency(product.price.toNumber())}</td>
                       <td className="p-3">
-                        <span className={`px-2 py-0.5 rounded text-[11px] ${product.stock > 0 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'}`}>
-                          {product.stock} un
-                        </span>
+                        {product.isMadeToOrder ? (
+                          <span className="px-2 py-0.5 rounded text-[11px] bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                            Sob Encomenda{product.productionDays ? ` (${product.productionDays}d)` : ''}
+                          </span>
+                        ) : (
+                          <span className={`px-2 py-0.5 rounded text-[11px] ${product.stock > 0 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'}`}>
+                            {product.stock} un
+                          </span>
+                        )}
                       </td>
                       <td className="p-3 text-slate-400">{product.category}</td>
                       <td className="p-3">

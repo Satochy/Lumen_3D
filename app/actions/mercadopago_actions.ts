@@ -79,7 +79,7 @@ export async function createPreferenceAction(
     const preferenceClient = new Preference(mpConfig)
 
     const preferenceItems = order.items.map((item) => ({
-      id: item.productId,
+      id: item.productId || item.id,
       title: item.productTitle,
       quantity: item.quantity,
       unit_price: Number(item.priceUnit),

@@ -32,6 +32,12 @@ const productFieldsSchema = z.object({
     .number({ message: 'Estoque inválido.' })
     .int('Estoque inválido.')
     .nonnegative('Estoque inválido.'),
+  isMadeToOrder: z.boolean().default(false),
+  productionDays: z
+    .number({ message: 'Prazo de produção inválido.' })
+    .int('Prazo de produção inválido.')
+    .positive('O prazo de produção deve ser maior que zero.')
+    .nullable(),
   weightGrams: z
     .number({ message: 'Peso inválido.' })
     .finite('Peso inválido.')
@@ -71,6 +77,8 @@ type ParsedProductData = {
   category: string
   price: Prisma.Decimal
   stock: number
+  isMadeToOrder: boolean
+  productionDays: number | null
   weightGrams: number | null
   dimensions: string | null
   isFeatured: boolean
@@ -82,7 +90,12 @@ function parseFields(formData: FormData): { error?: string; data?: ParsedProduct
   const category = String(formData.get('category') ?? '').trim() || 'Geral'
   const rawPrice = parseFloat(String(formData.get('price') ?? '').replace(',', '.'))
   const priceNumber = Math.round(rawPrice * 100) / 100
-  const stock = parseInt(String(formData.get('stock') ?? ''), 10)
+  const stock = parseInt(String(formData.get('stock') ?? '0'), 10)
+  const isMadeToOrder =
+    formData.get('isMadeToOrder') === 'on' || formData.get('isMadeToOrder') === 'true'
+  const rawProductionDays = String(formData.get('productionDays') ?? '').trim()
+  const productionDays =
+    isMadeToOrder && rawProductionDays ? parseInt(rawProductionDays, 10) : null
   const rawWeight = String(formData.get('weightGrams') ?? '').replace(',', '.').trim()
   const weightGrams = rawWeight ? parseFloat(rawWeight) : null
   const dimensions = String(formData.get('dimensions') ?? '').trim() || null
@@ -93,7 +106,9 @@ function parseFields(formData: FormData): { error?: string; data?: ParsedProduct
     description,
     category,
     price: priceNumber,
-    stock,
+    stock: Number.isNaN(stock) && isMadeToOrder ? 0 : stock,
+    isMadeToOrder,
+    productionDays,
     weightGrams,
     dimensions,
     isFeatured,

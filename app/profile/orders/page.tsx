@@ -20,6 +20,7 @@ const logisticsLabels: Record<LogisticsStatus, { label: string; style: string }>
   PREPARING: { label: 'Preparando / Na Fila', style: 'bg-slate-500/10 text-slate-300 border-slate-500/20' },
   PRINTING: { label: 'Em Produção (Impressão 3D)', style: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
   POST_PROCESSING: { label: 'Em Acabamento', style: 'bg-purple-500/10 text-purple-400 border-purple-500/20' },
+  READY_FOR_SHIPPING: { label: 'Pronto para Envio', style: 'bg-teal-500/10 text-teal-400 border-teal-500/20' },
   SHIPPED: { label: 'Enviado', style: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20' },
   DELIVERED: { label: 'Entregue', style: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
   CANCELLED: { label: 'Cancelado', style: 'bg-rose-500/10 text-rose-400 border-rose-500/20' },

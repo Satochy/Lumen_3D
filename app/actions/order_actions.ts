@@ -1,6 +1,6 @@
 'use server'
 
-import { randomUUID } from 'crypto'
+import { createHash } from 'crypto'
 import { z } from 'zod'
 import { revalidatePath } from 'next/cache'
 import { Prisma } from '@prisma/client'
@@ -168,25 +168,34 @@ export async function createOrderAction(input: OrderInput): Promise<CreateOrderR
       }
       resolvedAddress = dbAddr
     } else {
-      const userAddresses = await prisma.address.findMany({
+      const defaultAddress = await prisma.address.findFirst({
         where: { userId: user.id },
         orderBy: [{ isDefault: 'desc' }, { createdAt: 'desc' }],
       })
 
-      if (userAddresses.length > 0) {
-        const optionCep = selectedShippingOption.cep
-          ? sanitizeCEP(selectedShippingOption.cep)
-          : ''
-        const matchingByCep = optionCep
-          ? userAddresses.find((a) => sanitizeCEP(a.zipCode) === optionCep)
-          : undefined
-        resolvedAddress = matchingByCep ?? userAddresses[0]
+      if (defaultAddress) {
+        resolvedAddress = defaultAddress
       }
     }
 
-    const destinationCep = sanitizeCEP(
-      selectedShippingOption.cep || resolvedAddress?.zipCode || ''
-    )
+    if (resolvedAddress) {
+      const addressCep = sanitizeCEP(resolvedAddress.zipCode)
+      const optionCep = selectedShippingOption.cep
+        ? sanitizeCEP(selectedShippingOption.cep)
+        : ''
+
+      if (optionCep && optionCep !== addressCep) {
+        return {
+          success: false,
+          error:
+            'O CEP calculado no frete diverge do CEP do endereço de entrega cadastrado. Recalcule o frete para o seu endereço.',
+        }
+      }
+    }
+
+    const destinationCep = resolvedAddress
+      ? sanitizeCEP(resolvedAddress.zipCode)
+      : sanitizeCEP(selectedShippingOption.cep || '')
 
     if (!isValidCEP(destinationCep)) {
       return {
@@ -229,6 +238,8 @@ export async function createOrderAction(input: OrderInput): Promise<CreateOrderR
         title: true,
         price: true,
         stock: true,
+        isMadeToOrder: true,
+        productionDays: true,
         weightGrams: true,
         dimensions: true,
         variants: {
@@ -257,6 +268,8 @@ export async function createOrderAction(input: OrderInput): Promise<CreateOrderR
       productTitle: string
       quantity: number
       priceUnit: Prisma.Decimal
+      isMadeToOrder: boolean
+      productionDays: number | null
       weightGrams: number
       dimensions: string
     }[] = []
@@ -289,7 +302,7 @@ export async function createOrderAction(input: OrderInput): Promise<CreateOrderR
         }
       }
 
-      if (availableStock < item.quantity) {
+      if (!product.isMadeToOrder && availableStock < item.quantity) {
         return {
           success: false,
           error: `Estoque insuficiente para "${product.title}" (disponível: ${availableStock}).`,
@@ -305,6 +318,8 @@ export async function createOrderAction(input: OrderInput): Promise<CreateOrderR
         productTitle: product.title,
         quantity: item.quantity,
         priceUnit: unitPriceDecimal,
+        isMadeToOrder: product.isMadeToOrder,
+        productionDays: product.productionDays ?? null,
         weightGrams: product.weightGrams ?? 200,
         dimensions: product.dimensions ?? '15x10x5',
       })
@@ -415,6 +430,8 @@ export async function createOrderAction(input: OrderInput): Promise<CreateOrderR
           productTitle: item.productTitle,
           quantity: item.quantity,
           priceUnit: item.priceUnit,
+          isMadeToOrder: item.isMadeToOrder,
+          productionDays: item.productionDays,
         })),
       })
 
@@ -589,6 +606,18 @@ export async function processOrderPaymentAction(
       !baseUrl.includes('localhost') &&
       !baseUrl.includes('127.0.0.1')
 
+    const idempotencyKey = createHash('sha256')
+      .update(
+        [
+          order.id,
+          formData.payment_method_id,
+          formData.token || 'no-token',
+          String(installmentsNumber),
+          order.totalAmount.toFixed(2),
+        ].join(':')
+      )
+      .digest('hex')
+
     const paymentResponse = await paymentClient.create({
       body: {
         transaction_amount: transactionAmount,
@@ -630,7 +659,7 @@ export async function processOrderPaymentAction(
         },
       },
       requestOptions: {
-        idempotencyKey: `${order.id}-${randomUUID()}`,
+        idempotencyKey,
       },
     })
 
@@ -638,11 +667,22 @@ export async function processOrderPaymentAction(
     const mpPaymentId = paymentResponse.id ? String(paymentResponse.id) : undefined
 
     if (mpStatus === 'approved' && mpPaymentId) {
+      if (paymentResponse.currency_id !== 'BRL') {
+        console.error(
+          `[SEGURANÇA FINANCEIRA] Moeda inválida retornada no pagamento ${mpPaymentId}: ${String(paymentResponse.currency_id)}.`
+        )
+        return {
+          success: false,
+          error: 'Moeda de transação inválida para este pedido.',
+        }
+      }
+
       await confirmApprovedPaymentInDb({
         orderId: order.id,
         paymentId: mpPaymentId,
         externalReference: String(paymentResponse.external_reference || '').trim(),
         transactionAmount: paymentResponse.transaction_amount,
+        currencyId: paymentResponse.currency_id,
       })
 
       revalidatePath(`/marketplace/checkout/${order.id}`)

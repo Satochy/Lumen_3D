@@ -51,6 +51,8 @@ export default async function EditProductPage({ params }: EditProductPageProps) 
             category: product.category,
             price: product.price,
             stock: product.stock,
+            isMadeToOrder: product.isMadeToOrder,
+            productionDays: product.productionDays,
             weightGrams: product.weightGrams,
             dimensions: product.dimensions,
             images: product.images,

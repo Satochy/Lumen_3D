@@ -91,8 +91,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ received: true }, { status: 200 })
   }
 
-  // Validação opcional de assinatura caso MERCADOPAGO_WEBHOOK_SECRET esteja definido
+  // Validação de assinatura do webhook (obrigatória em produção)
   const webhookSecret = process.env.MERCADOPAGO_WEBHOOK_SECRET
+  if (process.env.NODE_ENV === 'production' && !webhookSecret) {
+    console.error(
+      'Webhook Mercado Pago: MERCADOPAGO_WEBHOOK_SECRET não configurado em produção.'
+    )
+    return NextResponse.json(
+      { error: 'Configuração de assinatura do webhook ausente.' },
+      { status: 500 }
+    )
+  }
+
   if (webhookSecret && !verifyMercadoPagoSignature(request, paymentId, webhookSecret)) {
     console.error('Webhook Mercado Pago: assinatura x-signature inválida.')
     return NextResponse.json({ error: 'Assinatura inválida.' }, { status: 401 })
@@ -142,8 +152,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Pedido não encontrado.' }, { status: 400 })
     }
 
-    // 5. Validar transaction_amount contra order.totalAmount quando aprovado
+    // 5. Validar moeda (BRL) e transaction_amount contra order.totalAmount quando aprovado
     if (mpPayment.status === 'approved') {
+      if (mpPayment.currency_id !== 'BRL') {
+        console.error(
+          `Webhook Mercado Pago: moeda inválida no pagamento ${paymentId} (esperado: BRL, recebido: ${String(mpPayment.currency_id)}).`
+        )
+        return NextResponse.json(
+          { error: 'Moeda de transação inválida.' },
+          { status: 400 }
+        )
+      }
+
       if (
         mpPayment.transaction_amount === undefined ||
         mpPayment.transaction_amount === null
@@ -175,6 +195,7 @@ export async function POST(request: NextRequest) {
         paymentId,
         externalReference,
         transactionAmount: paidDecimal,
+        currencyId: mpPayment.currency_id,
       })
 
       revalidatePath(`/marketplace/checkout/${order.id}`)

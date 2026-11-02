@@ -14,6 +14,7 @@ const logisticsBadges: Record<LogisticsStatus, { label: string; style: string }>
   PREPARING: { label: 'Na Fila', style: 'bg-slate-500/10 text-slate-400 border-slate-500/20' },
   PRINTING: { label: 'Em Impressão', style: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
   POST_PROCESSING: { label: 'Acabamento', style: 'bg-purple-500/10 text-purple-400 border-purple-500/20' },
+  READY_FOR_SHIPPING: { label: 'Pronto p/ Envio', style: 'bg-teal-500/10 text-teal-400 border-teal-500/20' },
   SHIPPED: { label: 'Enviado', style: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20' },
   DELIVERED: { label: 'Entregue', style: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
   CANCELLED: { label: 'Cancelado', style: 'bg-red-500/10 text-red-400 border-red-500/20' },
@@ -90,8 +91,13 @@ export default async function OrdersPage() {
                     {order.items.map((item) => (
                       <li key={item.id} className="py-2 flex justify-between items-center text-sm">
                         <div>
-                          <span className="font-medium text-slate-200">{item.productTitle || item.product.title}</span>
+                          <span className="font-medium text-slate-200">{item.productTitle || item.product?.title || 'Item Personalizado'}</span>
                           <span className="text-xs text-slate-400 ml-2">x{item.quantity}</span>
+                          {item.isMadeToOrder && (
+                            <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                              Sob Encomenda{item.productionDays ? ` (${item.productionDays}d)` : ''}
+                            </span>
+                          )}
                         </div>
                         <span className="text-xs text-slate-400">
                           Preço Unit.: {formatCurrency(item.priceUnit.toNumber())}

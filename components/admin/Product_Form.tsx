@@ -12,6 +12,8 @@ export interface ProductFormDefaults {
   category: string
   price: number
   stock: number
+  isMadeToOrder?: boolean
+  productionDays?: number | null
   weightGrams: number
   dimensions: string
   images: string[]
@@ -158,6 +160,38 @@ export default function Product_Form({ action, submitLabel, defaults }: ProductF
           placeholder="10x10x20 cm"
           className={inputCls}
         />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-950/60 border border-slate-800/80 rounded-xl p-4">
+        <div className="flex items-start gap-2.5 pt-1">
+          <input
+            type="checkbox"
+            id="isMadeToOrder"
+            name="isMadeToOrder"
+            defaultChecked={defaults?.isMadeToOrder ?? false}
+            className="mt-0.5 rounded bg-slate-950 border-slate-800 text-cyan-500 focus:ring-0"
+          />
+          <div>
+            <label htmlFor="isMadeToOrder" className="text-xs font-semibold text-slate-200 block">
+              Produto Sob Encomenda (Fila de Produção)
+            </label>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              Quando marcado, não exige estoque físico pronto e entra na fila de impressão após pagamento.
+            </p>
+          </div>
+        </div>
+
+        <div>
+          <label className={labelCls}>Prazo de Produção Estimado (Dias úteis)</label>
+          <input
+            name="productionDays"
+            type="number"
+            min="1"
+            defaultValue={defaults?.productionDays ?? undefined}
+            placeholder="Ex: 5 (apenas para Sob Encomenda)"
+            className={inputCls}
+          />
+        </div>
       </div>
 
       {/* Fotos */}

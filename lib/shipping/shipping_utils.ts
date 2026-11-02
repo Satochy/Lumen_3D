@@ -10,7 +10,7 @@
  * @returns CEP sanitizado com exatamente 8 dígitos, ou string vazia se inválido
  */
 export function sanitizeCEP(cep: string): string {
-  return cep.replace(/\D/g, '').slice(0, 8)
+  return cep.replace(/\D/g, '')
 }
 
 /**

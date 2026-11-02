@@ -45,6 +45,26 @@ export async function updateLogisticsStatus(formData: FormData): Promise<void> {
   const { orderId, logisticsStatus } = parsed.data
 
   try {
+    const existingOrder = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: { id: true, paymentStatus: true, logisticsStatus: true },
+    })
+
+    if (!existingOrder) {
+      return
+    }
+
+    const allowedWhenUnpaid: LogisticsStatus[] = ['PREPARING', 'CANCELLED']
+    if (
+      existingOrder.paymentStatus !== 'PAID' &&
+      !allowedWhenUnpaid.includes(logisticsStatus)
+    ) {
+      console.error(
+        `Transição logística bloqueada para o pedido ${orderId}: paymentStatus="${existingOrder.paymentStatus}", destino="${logisticsStatus}".`
+      )
+      return
+    }
+
     await prisma.order.update({
       where: { id: orderId },
       data: { logisticsStatus },

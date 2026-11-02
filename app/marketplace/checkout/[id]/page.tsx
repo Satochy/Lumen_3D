@@ -78,7 +78,7 @@ export default async function CheckoutOrderPage({
         : null,
     items: order.items.map((item) => ({
       id: item.id,
-      productId: item.productId,
+      productId: item.productId ?? '',
       productTitle: item.productTitle,
       quantity: item.quantity,
       priceUnit: Number(item.priceUnit),

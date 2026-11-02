@@ -66,8 +66,16 @@ export async function calculateShippingAction(
   // 4. Cotação de Transportadoras Externas (Melhor Envio)
   const token = process.env.MELHOR_ENVIO_TOKEN
 
-  // Sem token configurado no .env, utiliza as opções simuladas para desenvolvimento
+  // Sem token configurado no .env: bloqueia mock em produção; utiliza opções simuladas apenas em desenvolvimento
   if (!token) {
+    if (process.env.NODE_ENV === 'production') {
+      console.error('MELHOR_ENVIO_TOKEN ausente em ambiente de produção.')
+      if (options.length > 0) return { options }
+      return {
+        options: [],
+        error: 'Frete temporariamente indisponível. Tente novamente mais tarde.',
+      }
+    }
     const mockOptions = generateMockShippingOptions(items)
     return { options: [...options, ...mockOptions] }
   }
@@ -82,21 +90,19 @@ export async function calculateShippingAction(
   }
 
   const payload = buildMelhorEnvioPayload(cepSanitizado, items)
+  const calculateUrl = getMelhorEnvioCalculateUrl()
 
   try {
-    const response = await fetch(
-      'https://sandbox.melhorenvio.com.br/api/v2/me/shipment/calculate',
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-          'User-Agent': 'Lumen3D (suporte@lumen3d.com.br)',
-        },
-        body: JSON.stringify(payload),
-      }
-    )
+    const response = await fetch(calculateUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        'User-Agent': 'Lumen3D (suporte@lumen3d.com.br)',
+      },
+      body: JSON.stringify(payload),
+    })
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}))
@@ -123,22 +129,46 @@ export async function calculateShippingAction(
 }
 
 /**
+ * Resolve a URL do endpoint de cotação do Melhor Envio a partir do ambiente.
+ * Usa process.env.MELHOR_ENVIO_API_URL quando configurado; caso contrário,
+ * utiliza produção em NODE_ENV === 'production' e sandbox nos demais ambientes.
+ */
+function getMelhorEnvioCalculateUrl(): string {
+  const configuredUrl = process.env.MELHOR_ENVIO_API_URL?.trim()
+  if (configuredUrl) {
+    const cleanUrl = configuredUrl.replace(/\/$/, '')
+    if (cleanUrl.endsWith('/shipment/calculate')) {
+      return cleanUrl
+    }
+    if (cleanUrl.endsWith('/api/v2/me')) {
+      return `${cleanUrl}/shipment/calculate`
+    }
+    return `${cleanUrl}/api/v2/me/shipment/calculate`
+  }
+
+  return process.env.NODE_ENV === 'production'
+    ? 'https://www.melhorenvio.com.br/api/v2/me/shipment/calculate'
+    : 'https://sandbox.melhorenvio.com.br/api/v2/me/shipment/calculate'
+}
+
+/**
  * Constrói o payload para a API do Melhor Envio
+ * Envia cada item com peso unitário em kg, dimensões unitárias e sua respectiva quantity
  */
 function buildMelhorEnvioPayload(cepDestino: string, items: ShippingItem[]) {
-  const totalWeightKg = items.reduce(
-    (acc, item) => acc + (item.weightGrams / 1000) * item.quantity,
-    0
-  )
+  const products = items.map((item, index) => {
+    const dims = getVolumeFromDimensions(item.dimensions)
+    const unitWeightKg = Math.max((item.weightGrams || 0) / 1000, 0.001)
 
-  const maxDims = items.reduce(
-    (max, item) => {
-      const dims = getVolumeFromDimensions(item.dimensions)
-      const volume = dims.width * dims.height * dims.length
-      return volume > max.volume ? { ...dims, volume } : max
-    },
-    { width: 0, height: 0, length: 0, volume: 0 }
-  )
+    return {
+      id: `item-${index + 1}`,
+      weight: unitWeightKg,
+      width: dims.width,
+      height: dims.height,
+      length: dims.length,
+      quantity: item.quantity,
+    }
+  })
 
   return {
     from: {
@@ -147,15 +177,7 @@ function buildMelhorEnvioPayload(cepDestino: string, items: ShippingItem[]) {
     to: {
       postal_code: cepDestino,
     },
-    products: [
-      {
-        weight: Math.max(totalWeightKg, 0.001),
-        width: maxDims.width,
-        height: maxDims.height,
-        length: maxDims.length,
-        quantity: items.reduce((acc, item) => acc + item.quantity, 0),
-      },
-    ],
+    products,
     options: {
       insurance_value: 0,
       receipt: false,
@@ -192,13 +214,16 @@ function parseMelhorEnvioResponse(data: unknown): ShippingOption[] {
   const options: ShippingOption[] = []
 
   if (Array.isArray(data)) {
-    data.forEach((item: any) => {
+    data.forEach((rawItem: unknown) => {
+      if (!rawItem || typeof rawItem !== 'object') return
+      const item = rawItem as Record<string, unknown>
+      const company = item.company as Record<string, unknown> | undefined
       if (!item.error && item.price) {
         const price = Number(item.price || 0)
         options.push({
-          serviceId: `me-${item.id}`,
+          serviceId: `me-${String(item.id)}`,
           serviceName: String(item.name || 'Envio'),
-          companyName: String(item.company?.name || 'Transportadora'),
+          companyName: String(company?.name || 'Transportadora'),
           price,
           formattedPrice: formatCurrencyBR(price),
           deliveryTime: Number(item.delivery_time || 0),

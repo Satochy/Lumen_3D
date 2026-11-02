@@ -9,7 +9,8 @@ import { prisma } from '@/lib/prisma'
 function isMadeToOrderProduct(product: {
   category: string
   stock: number
-} & Record<string, unknown>): boolean {
+  isMadeToOrder?: boolean
+}): boolean {
   if (product.isMadeToOrder === true) return true
   if (product.category.toLowerCase().includes('encomenda')) return true
   return false
@@ -31,8 +32,15 @@ export async function confirmApprovedPaymentInDb(params: {
   paymentId: string
   externalReference: string
   transactionAmount: number | string | Prisma.Decimal | null | undefined
+  currencyId?: string | null
 }): Promise<{ confirmed: boolean; alreadyProcessed: boolean }> {
-  const { orderId, paymentId, externalReference, transactionAmount } = params
+  const {
+    orderId,
+    paymentId,
+    externalReference,
+    transactionAmount,
+    currencyId = 'BRL',
+  } = params
   const cleanPaymentId = String(paymentId).trim()
   const cleanExternalRef = String(externalReference || '').trim()
 
@@ -77,7 +85,16 @@ export async function confirmApprovedPaymentInDb(params: {
       )
     }
 
-    // 3. Validação obrigatória do valor pago (transaction_amount) contra order.totalAmount
+    // 3. Validação obrigatória de moeda (BRL) e do valor pago (transaction_amount) contra order.totalAmount
+    if (currencyId !== 'BRL') {
+      console.error(
+        `[SEGURANÇA FINANCEIRA] Moeda inválida no pagamento ${cleanPaymentId} do pedido ${order.id}: esperado "BRL", recebido "${String(currencyId)}".`
+      )
+      throw new Error(
+        `Moeda do pagamento inválida (${String(currencyId)}). Apenas BRL é aceito.`
+      )
+    }
+
     if (transactionAmount === undefined || transactionAmount === null) {
       throw new Error(
         `Valor do pagamento (transaction_amount) ausente para o pedido "${order.id}".`
@@ -98,36 +115,53 @@ export async function confirmApprovedPaymentInDb(params: {
       )
     }
 
-    // 4. Registrar evento no PaymentWebhookLog
-    await tx.paymentWebhookLog.create({
+    const hasMadeToOrderItem = order.items.some(
+      (item) =>
+        item.isMadeToOrder ||
+        !item.productId ||
+        !item.product ||
+        isMadeToOrderProduct(item.product)
+    )
+
+    // 4. Atualizar Order para PAID de forma atômica condicional (proteção contra Race Condition)
+    // Regra D06/D07: Pedido somente de Pronta Entrega vai para READY_FOR_SHIPPING;
+    // pedido com item Sob Encomenda permanece na fila de produção (PREPARING).
+    const result = await tx.order.updateMany({
+      where: {
+        id: order.id,
+        paymentStatus: { not: 'PAID' },
+      },
       data: {
+        paymentStatus: 'PAID',
+        ...(!hasMadeToOrderItem && order.logisticsStatus === 'PREPARING'
+          ? { logisticsStatus: 'READY_FOR_SHIPPING' }
+          : {}),
+      },
+    })
+
+    if (result.count === 0) {
+      return { confirmed: false, alreadyProcessed: true }
+    }
+
+    // 5. Registrar evento no PaymentWebhookLog
+    await tx.paymentWebhookLog.upsert({
+      where: { eventId: cleanPaymentId },
+      update: { status: 'approved' },
+      create: {
         eventId: cleanPaymentId,
         status: 'approved',
       },
     })
 
-    if (order.paymentStatus === 'PAID') {
-      return { confirmed: false, alreadyProcessed: true }
-    }
-
-    // 5. Atualizar Order para PAID
-    await tx.order.update({
-      where: { id: order.id },
-      data: {
-        paymentStatus: 'PAID',
-      },
-    })
-
     // 6. Iterar sobre os OrderItems: baixar estoque apenas de Pronta Entrega
     for (const item of order.items) {
-      const productRecord = item.product as {
-        id: string
-        category: string
-        stock: number
-      } & Record<string, unknown>
-
-      if (isMadeToOrderProduct(productRecord)) {
-        // Produto Sob Encomenda: não mexe no estoque físico; segue para fila de produção no Admin
+      if (
+        item.isMadeToOrder ||
+        !item.productId ||
+        !item.product ||
+        isMadeToOrderProduct(item.product)
+      ) {
+        // Produto Sob Encomenda ou item personalizado: não mexe no estoque físico; segue para fila de produção no Admin
         continue
       }
 
@@ -225,12 +259,20 @@ export async function syncOrderWithMercadoPago(
         return { isPaid: false, status: mpPayment.status || 'pending' }
       }
 
+      if (mpPayment.currency_id !== 'BRL') {
+        console.error(
+          `[SEGURANÇA FINANCEIRA] Sync rejeitado: moeda "${String(mpPayment.currency_id)}" inválida para order.id "${order.id}".`
+        )
+        return { isPaid: false, status: mpPayment.status || 'pending' }
+      }
+
       if (mpPayment.status === 'approved' && mpPayment.id) {
         await confirmApprovedPaymentInDb({
           orderId: order.id,
           paymentId: String(mpPayment.id),
           externalReference,
           transactionAmount: mpPayment.transaction_amount,
+          currencyId: mpPayment.currency_id,
         })
         return { isPaid: true, status: 'approved' }
       }
@@ -250,6 +292,7 @@ export async function syncOrderWithMercadoPago(
     const approvedPayment = results.find(
       (p) =>
         p.status === 'approved' &&
+        p.currency_id === 'BRL' &&
         p.id &&
         String(p.external_reference || '').trim() === order.id
     )
@@ -260,6 +303,7 @@ export async function syncOrderWithMercadoPago(
         paymentId: String(approvedPayment.id),
         externalReference: String(approvedPayment.external_reference || '').trim(),
         transactionAmount: approvedPayment.transaction_amount,
+        currencyId: approvedPayment.currency_id,
       })
       return { isPaid: true, status: 'approved' }
     }
