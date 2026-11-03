@@ -31,6 +31,14 @@ enum LogisticsStatus {
   CANCELLED
 }
 
+
+enum ProductionStage {
+  QUEUED
+  PRINTING
+  POST_PROCESSING
+  COMPLETED
+}
+
 enum LeadStatus {
   NEW
   ANALYZING
@@ -261,6 +269,7 @@ model OrderItem {
   isReady                   Boolean   @default(false)
   readyAt                   DateTime?
   readyByUserId             String?
+  productionStage           ProductionStage @default(QUEUED)
 
   stockReservation StockReservation?
 

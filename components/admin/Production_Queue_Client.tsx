@@ -1,0 +1,685 @@
+'use client'
+
+import React, { useState, useTransition } from 'react'
+import Link from 'next/link'
+import {
+  Printer,
+  CheckCircle2,
+  Package,
+  Search,
+  Check,
+  Loader2,
+  Clock,
+  User,
+  MapPin,
+  AlertTriangle,
+  Sparkles,
+  Layers,
+  ExternalLink,
+  Lock,
+} from 'lucide-react'
+import { ProductionStage } from '@prisma/client'
+import {
+  type ProductionQueueItem,
+  advanceItemStageAction,
+  updateItemProductionStageAction,
+} from '@/app/actions/production_actions'
+
+interface ProductionQueueClientProps {
+  initialItems: ProductionQueueItem[]
+}
+
+type TabKey = 'todos' | 'na_fila' | 'imprimindo' | 'pos_processamento' | 'concluidos'
+
+const stageBadges: Record<
+  ProductionStage,
+  { label: string; style: string; dot: string }
+> = {
+  QUEUED: {
+    label: 'Na Fila',
+    style: 'bg-[#121624] text-slate-300 border-slate-800',
+    dot: 'bg-slate-400',
+  },
+  PRINTING: {
+    label: 'Imprimindo',
+    style: 'bg-[#0c1f38] text-sky-300 border-sky-900/60',
+    dot: 'bg-sky-400 animate-pulse',
+  },
+  POST_PROCESSING: {
+    label: 'Pós-Processamento',
+    style: 'bg-[#221035] text-purple-300 border-purple-900/60',
+    dot: 'bg-purple-400',
+  },
+  COMPLETED: {
+    label: 'Concluído',
+    style: 'bg-[#062c1d] text-emerald-300 border-emerald-900/70',
+    dot: 'bg-emerald-400',
+  },
+}
+
+function renderVariantBadge(snapshot: unknown) {
+  if (!snapshot) {
+    return (
+      <span className="px-2 py-0.5 rounded-md text-[10px] font-mono bg-slate-900 text-slate-400 border border-slate-800">
+        Padrão
+      </span>
+    )
+  }
+
+  let parsed = snapshot
+  if (typeof snapshot === 'string') {
+    try {
+      parsed = JSON.parse(snapshot)
+    } catch {
+      return (
+        <span className="px-2 py-0.5 rounded-md text-[10px] font-mono bg-cyan-950/60 text-cyan-300 border border-cyan-800/40">
+          {snapshot}
+        </span>
+      )
+    }
+  }
+
+  if (typeof parsed === 'object' && parsed !== null) {
+    const entries = Object.entries(parsed as Record<string, unknown>)
+    if (entries.length === 0) {
+      return (
+        <span className="px-2 py-0.5 rounded-md text-[10px] font-mono bg-slate-900 text-slate-400 border border-slate-800">
+          Padrão
+        </span>
+      )
+    }
+
+    return (
+      <div className="flex flex-wrap gap-1">
+        {entries.map(([key, value]) => (
+          <span
+            key={key}
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-cyan-950/60 text-cyan-300 border border-cyan-800/40 text-[10px] font-mono"
+          >
+            <span className="text-cyan-500/80">{key}:</span>
+            <span className="font-semibold text-cyan-200">{String(value)}</span>
+          </span>
+        ))}
+      </div>
+    )
+  }
+
+  return (
+    <span className="px-2 py-0.5 rounded-md text-[10px] font-mono bg-slate-900 text-slate-400 border border-slate-800">
+      Padrão
+    </span>
+  )
+}
+
+export default function Production_Queue_Client({
+  initialItems,
+}: ProductionQueueClientProps) {
+  const [items, setItems] = useState<ProductionQueueItem[]>(initialItems)
+  const [activeTab, setActiveTab] = useState<TabKey>('todos')
+  const [loadingItemId, setLoadingItemId] = useState<string | null>(null)
+  const [searchTerm, setSearchTerm] = useState<string>('')
+  const [, startTransition] = useTransition()
+  const [successBanner, setSuccessBanner] = useState<{
+    orderId: string
+    shortId: string
+  } | null>(null)
+
+  // Cálculo de dias decorridos desde a compra
+  const getElapsedDays = (createdAtStr: string) => {
+    const created = new Date(createdAtStr)
+    const now = new Date()
+    const diffTime = Math.abs(now.getTime() - created.getTime())
+    return Math.floor(diffTime / (1000 * 60 * 60 * 24))
+  }
+
+  // Contadores por Etapa Real de Produção
+  const activeItemsCount = items.filter(
+    (i) => i.productionStage !== ProductionStage.COMPLETED
+  ).length
+  const naFilaCount = items.filter(
+    (i) => i.productionStage === ProductionStage.QUEUED
+  ).length
+  const imprimindoCount = items.filter(
+    (i) => i.productionStage === ProductionStage.PRINTING
+  ).length
+  const posProcessamentoCount = items.filter(
+    (i) => i.productionStage === ProductionStage.POST_PROCESSING
+  ).length
+  const concluidosCount = items.filter(
+    (i) => i.productionStage === ProductionStage.COMPLETED
+  ).length
+
+  // Filtragem ativa por tab e busca
+  const filteredItems = items.filter((item) => {
+    if (activeTab === 'todos') {
+      // "Todos" mostra todos os itens ativos na oficina
+      if (item.productionStage === ProductionStage.COMPLETED) return false
+    } else if (activeTab === 'na_fila') {
+      if (item.productionStage !== ProductionStage.QUEUED) return false
+    } else if (activeTab === 'imprimindo') {
+      if (item.productionStage !== ProductionStage.PRINTING) return false
+    } else if (activeTab === 'pos_processamento') {
+      if (item.productionStage !== ProductionStage.POST_PROCESSING) return false
+    } else if (activeTab === 'concluidos') {
+      if (item.productionStage !== ProductionStage.COMPLETED) return false
+    }
+
+    if (searchTerm.trim()) {
+      const q = searchTerm.toLowerCase()
+      const matchProduct = item.productTitle.toLowerCase().includes(q)
+      const matchOrder = item.order.id.toLowerCase().includes(q)
+      const matchUser =
+        item.order.user?.name?.toLowerCase().includes(q) ||
+        item.order.user?.username?.toLowerCase().includes(q) ||
+        item.order.user?.email?.toLowerCase().includes(q)
+      return matchProduct || matchOrder || matchUser
+    }
+
+    return true
+  })
+
+  // Avançar para a próxima etapa na esteira
+  const handleAdvanceStage = (orderItemId: string) => {
+    if (loadingItemId) return
+    const targetItem = items.find((i) => i.id === orderItemId)
+    setLoadingItemId(orderItemId)
+
+    startTransition(async () => {
+      try {
+        const res = await advanceItemStageAction(orderItemId)
+        if (res.success && res.newStage) {
+          const nowStr = new Date().toISOString()
+          setItems((prev) =>
+            prev.map((i) =>
+              i.id === orderItemId
+                ? {
+                    ...i,
+                    productionStage: res.newStage as ProductionStage,
+                    isReady: res.newStage === ProductionStage.COMPLETED,
+                    readyAt:
+                      res.newStage === ProductionStage.COMPLETED ? nowStr : i.readyAt,
+                  }
+                : i
+            )
+          )
+
+          if (res.orderMovedToReady && targetItem) {
+            setSuccessBanner({
+              orderId: targetItem.orderId,
+              shortId: targetItem.orderId.slice(-6).toUpperCase(),
+            })
+          }
+        } else {
+          alert(res.error || 'Erro ao avançar etapa.')
+        }
+      } catch (err: unknown) {
+        console.error('Erro na ação:', err)
+        alert('Ocorreu um erro ao atualizar o item.')
+      } finally {
+        setLoadingItemId(null)
+      }
+    })
+  }
+
+  // Concluir diretamente a peça (Marcar Pronto)
+  const handleDirectComplete = (orderItemId: string) => {
+    if (loadingItemId) return
+    const targetItem = items.find((i) => i.id === orderItemId)
+    setLoadingItemId(orderItemId)
+
+    startTransition(async () => {
+      try {
+        const res = await updateItemProductionStageAction(
+          orderItemId,
+          ProductionStage.COMPLETED
+        )
+        if (res.success) {
+          const nowStr = new Date().toISOString()
+          setItems((prev) =>
+            prev.map((i) =>
+              i.id === orderItemId
+                ? {
+                    ...i,
+                    productionStage: ProductionStage.COMPLETED,
+                    isReady: true,
+                    readyAt: nowStr,
+                  }
+                : i
+            )
+          )
+
+          if (res.orderMovedToReady && targetItem) {
+            setSuccessBanner({
+              orderId: targetItem.orderId,
+              shortId: targetItem.orderId.slice(-6).toUpperCase(),
+            })
+          }
+        } else {
+          alert(res.error || 'Erro ao concluir peça.')
+        }
+      } catch (err: unknown) {
+        console.error('Erro na ação:', err)
+        alert('Ocorreu um erro ao concluir a peça.')
+      } finally {
+        setLoadingItemId(null)
+      }
+    })
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Banner de Notificação de Auto-Avanço */}
+      {successBanner && (
+        <div className="p-4 rounded-2xl bg-teal-500/15 border border-teal-500/30 text-teal-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xl shadow-teal-950/30 animate-in fade-in duration-200">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl bg-teal-500/20 border border-teal-500/40 flex items-center justify-center text-teal-300 shrink-0">
+              <CheckCircle2 className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-teal-100">
+                🎉 Todas as peças do pedido #{successBanner.shortId} estão prontas!
+              </p>
+              <p className="text-[11px] text-teal-300/80">
+                O pedido foi automaticamente promovido para <strong>Pronto p/ Envio</strong> no Gerenciar Vendas.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 self-end sm:self-auto">
+            <Link
+              href="/admin/orders?tab=envio"
+              className="px-3 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-500 text-white font-semibold text-xs transition shadow-sm"
+            >
+              Ver na Expedição
+            </Link>
+            <button
+              onClick={() => setSuccessBanner(null)}
+              className="p-1 text-teal-400 hover:text-teal-200 text-xs"
+              aria-label="Fechar alerta"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 1. Alinhamento de Cabeçalho e Filtros (Tabs em Pílulas com foco em etapas) */}
+      <div className="flex flex-wrap items-center justify-between gap-2 pb-2">
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+          {/* Tab: Todos Ativos */}
+          <button
+            onClick={() => setActiveTab('todos')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-2 ${
+              activeTab === 'todos'
+                ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+            }`}
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span>Todos Ativos</span>
+            <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-slate-800 text-slate-300 font-bold">
+              {activeItemsCount}
+            </span>
+          </button>
+
+          {/* Tab: Na Fila */}
+          <button
+            onClick={() => setActiveTab('na_fila')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-2 ${
+              activeTab === 'na_fila'
+                ? 'bg-indigo-500/15 text-indigo-300 border border-indigo-500/40'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+            }`}
+          >
+            <Clock className="w-3.5 h-3.5 text-indigo-400" />
+            <span>Na Fila</span>
+            {naFilaCount > 0 && (
+              <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-indigo-500/20 text-indigo-300 font-bold">
+                {naFilaCount}
+              </span>
+            )}
+          </button>
+
+          {/* Tab: Imprimindo */}
+          <button
+            onClick={() => setActiveTab('imprimindo')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-2 ${
+              activeTab === 'imprimindo'
+                ? 'bg-sky-500/15 text-sky-300 border border-sky-500/40'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+            }`}
+          >
+            <Printer className="w-3.5 h-3.5 text-sky-400" />
+            <span>Imprimindo</span>
+            {imprimindoCount > 0 && (
+              <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-sky-500/20 text-sky-300 font-bold">
+                {imprimindoCount}
+              </span>
+            )}
+          </button>
+
+          {/* Tab: Pós-Processamento */}
+          <button
+            onClick={() => setActiveTab('pos_processamento')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-2 ${
+              activeTab === 'pos_processamento'
+                ? 'bg-purple-500/15 text-purple-300 border border-purple-500/40'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+            <span>Pós-Processamento</span>
+            {posProcessamentoCount > 0 && (
+              <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-purple-500/20 text-purple-300 font-bold">
+                {posProcessamentoCount}
+              </span>
+            )}
+          </button>
+
+          {/* Tab: Concluídos (Histórico Inalterável) */}
+          <button
+            onClick={() => setActiveTab('concluidos')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-2 ${
+              activeTab === 'concluidos'
+                ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/40'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+            }`}
+          >
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Concluídos</span>
+            {concluidosCount > 0 && (
+              <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-emerald-500/20 text-emerald-300 font-bold">
+                {concluidosCount}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* Campo de Busca Rápida alinhado à direita */}
+        <div className="relative w-full sm:w-64">
+          <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Buscar por peça, pedido ou cliente..."
+            className="w-full pl-9 pr-3 py-2 bg-slate-950/80 border border-slate-800 rounded-xl text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-cyan-500"
+          />
+        </div>
+      </div>
+
+      {/* 2. Order List Table de Produção */}
+      <div className="rounded-2xl border border-slate-800/80 bg-[#080d1e]/90 shadow-2xl overflow-hidden backdrop-blur-sm">
+        {filteredItems.length === 0 ? (
+          /* 3. Estado Vazio (Empty State) Refinado */
+          <div className="py-16 px-6 text-center text-slate-400 space-y-3">
+            <div className="w-12 h-12 rounded-2xl bg-teal-500/10 border border-teal-500/20 text-teal-400 flex items-center justify-center mx-auto shadow-inner">
+              <CheckCircle2 className="w-6 h-6" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-sm font-semibold text-slate-200">
+                {activeTab === 'concluidos'
+                  ? 'Nenhuma peça no histórico de concluídos ainda.'
+                  : 'Tudo em dia na oficina!'}
+              </h3>
+              <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                {activeTab === 'concluidos'
+                  ? 'As peças finalizadas nas etapas anteriores serão arquivadas permanentemente aqui.'
+                  : 'Não há peças sob encomenda aguardando produção para esta etapa.'}
+              </p>
+            </div>
+            {activeTab !== 'concluidos' && (
+              <div className="pt-1">
+                <Link
+                  href="/admin/orders"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-xs font-semibold text-cyan-400 border border-slate-800 transition"
+                >
+                  <span>Ver Gerenciar Vendas</span>
+                  <ExternalLink className="w-3 h-3" />
+                </Link>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-slate-800/80 bg-slate-950/60 text-[10px] font-mono uppercase tracking-wider text-slate-400">
+                  <th className="py-3 px-4">Pedido & Cliente</th>
+                  <th className="py-3 px-4">Peça & Especificações</th>
+                  <th className="py-3 px-4 text-center">Quantidade</th>
+                  <th className="py-3 px-4">Data Limite / Prazo</th>
+                  <th className="py-3 px-4">Status Operacional</th>
+                  <th className="py-3 px-4 text-right">Ação</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/50 text-xs">
+                {filteredItems.map((item) => {
+                  const createdDate = new Date(item.order.createdAt)
+                  const elapsedDays = getElapsedDays(item.order.createdAt)
+                  const isCompleted = item.productionStage === ProductionStage.COMPLETED
+                  const isOverdue =
+                    item.productionDays &&
+                    elapsedDays > item.productionDays &&
+                    !isCompleted
+
+                  const deadlineDate = item.productionDays
+                    ? new Date(
+                        createdDate.getTime() +
+                          item.productionDays * 24 * 60 * 60 * 1000
+                      )
+                    : null
+
+                  const badge =
+                    stageBadges[item.productionStage] || stageBadges.QUEUED
+                  const isLoading = loadingItemId === item.id
+
+                  return (
+                    <tr
+                      key={item.id}
+                      className={`transition-colors duration-150 ${
+                        isOverdue
+                          ? 'bg-rose-950/15 hover:bg-rose-950/25'
+                          : isCompleted
+                          ? 'bg-slate-950/40 hover:bg-slate-950/60 opacity-90'
+                          : 'hover:bg-slate-900/50'
+                      }`}
+                    >
+                      {/* Coluna 1: Pedido & Cliente */}
+                      <td className="py-3.5 px-4 font-mono">
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-1.5">
+                            <Link
+                              href="/admin/orders"
+                              className="font-bold text-slate-100 hover:text-cyan-300 transition text-xs"
+                              title="Ver pedido no Gerenciar Vendas"
+                            >
+                              #{item.order.id.slice(-6).toUpperCase()}
+                            </Link>
+                            {item.order.isLocalDelivery && (
+                              <span
+                                className="inline-flex items-center gap-0.5 text-[10px] text-teal-400 font-mono"
+                                title="Entrega Local Grátis"
+                              >
+                                <MapPin className="w-2.5 h-2.5" />
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-slate-400 flex items-center gap-1 font-sans truncate max-w-[150px]">
+                            <User className="w-3 h-3 text-slate-500 shrink-0" />
+                            <span className="truncate">
+                              {item.order.user?.name ||
+                                item.order.user?.username ||
+                                'Cliente Balcão'}
+                            </span>
+                          </p>
+                        </div>
+                      </td>
+
+                      {/* Coluna 2: Peça & Especificações */}
+                      <td className="py-3.5 px-4">
+                        <div className="flex items-center gap-3">
+                          {item.product?.images?.[0] ? (
+                            /* eslint-disable-next-line @next/next/no-img-element */
+                            <img
+                              src={item.product.images[0]}
+                              alt={item.productTitle}
+                              className="w-9 h-9 rounded-xl object-cover border border-slate-800 shrink-0"
+                            />
+                          ) : (
+                            <div className="w-9 h-9 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-600 shrink-0">
+                              <Package className="w-4 h-4" />
+                            </div>
+                          )}
+
+                          <div className="min-w-0 max-w-[200px] sm:max-w-[260px] space-y-1">
+                            <p className="font-semibold text-slate-100 truncate text-xs">
+                              {item.productTitle}
+                            </p>
+                            {renderVariantBadge(item.variantAttributesSnapshot)}
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Coluna 3: Quantidade (Destacada) */}
+                      <td className="py-3.5 px-4 text-center">
+                        <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-indigo-950/70 text-indigo-300 border border-indigo-900/60 shadow-sm">
+                          {item.quantity} un
+                        </span>
+                      </td>
+
+                      {/* Coluna 4: Data Limite / Prazo */}
+                      <td className="py-3.5 px-4 font-mono">
+                        {deadlineDate ? (
+                          <div className="space-y-0.5">
+                            <p className="text-slate-200 font-semibold text-xs">
+                              {deadlineDate.toLocaleDateString('pt-BR')}
+                            </p>
+                            <div className="flex items-center gap-1 text-[10px]">
+                              {isOverdue ? (
+                                <span className="px-1.5 py-0.2 rounded bg-[#2c0e12] text-rose-300 border border-rose-900/70 font-bold inline-flex items-center gap-1">
+                                  <AlertTriangle className="w-2.5 h-2.5 text-rose-400" />
+                                  <span>Atrasado ({elapsedDays}d)</span>
+                                </span>
+                              ) : isCompleted ? (
+                                <span className="text-emerald-400 font-mono">
+                                  Entregue no prazo
+                                </span>
+                              ) : (
+                                <span className="text-slate-400">
+                                  {item.productionDays}d úteis (há {elapsedDays}d)
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="space-y-0.5">
+                            <p className="text-slate-300 text-xs">
+                              {createdDate.toLocaleDateString('pt-BR')}
+                            </p>
+                            <p className="text-[10px] text-slate-500">
+                              Comprado há {elapsedDays}d
+                            </p>
+                          </div>
+                        )}
+                      </td>
+
+                      {/* Coluna 5: Status Operacional (Badge da Etapa Real) */}
+                      <td className="py-3.5 px-4">
+                        <span
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-medium border inline-flex items-center gap-1.5 ${badge.style}`}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full ${badge.dot}`} />
+                          <span>{badge.label}</span>
+                        </span>
+                      </td>
+
+                      {/* Coluna 6: Ação */}
+                      <td className="py-3.5 px-4 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {isCompleted ? (
+                            /* Visão de Concluídos: Histórico Inalterável */
+                            <div className="flex items-center gap-1 text-[11px] text-slate-400 font-mono justify-end">
+                              <Lock className="w-3 h-3 text-emerald-400/80" />
+                              <span title={`Concluído em ${item.readyAt ? new Date(item.readyAt).toLocaleString('pt-BR') : 'registro'}`}>
+                                Histórico Inalterável
+                              </span>
+                            </div>
+                          ) : (
+                            /* Etapas Ativas: Botão de Avanço na Esteira + Atalho Concluir */
+                            <div className="flex items-center justify-end gap-1.5">
+                              {/* Botão de Avançar Etapa */}
+                              {item.productionStage === ProductionStage.QUEUED && (
+                                <button
+                                  onClick={() => handleAdvanceStage(item.id)}
+                                  disabled={isLoading || Boolean(loadingItemId)}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-500 disabled:bg-slate-800 disabled:text-slate-500 text-white font-semibold text-xs transition shadow-md shadow-sky-950/40 cursor-pointer disabled:cursor-not-allowed"
+                                  title="Iniciar impressão desta peça na máquina"
+                                >
+                                  {isLoading ? (
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  ) : (
+                                    <Printer className="w-3.5 h-3.5" />
+                                  )}
+                                  <span>Iniciar Impressão</span>
+                                </button>
+                              )}
+
+                              {item.productionStage === ProductionStage.PRINTING && (
+                                <button
+                                  onClick={() => handleAdvanceStage(item.id)}
+                                  disabled={isLoading || Boolean(loadingItemId)}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:bg-slate-800 disabled:text-slate-500 text-white font-semibold text-xs transition shadow-md shadow-purple-950/40 cursor-pointer disabled:cursor-not-allowed"
+                                  title="Enviar peça para bancada de pós-processamento"
+                                >
+                                  {isLoading ? (
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  ) : (
+                                    <Sparkles className="w-3.5 h-3.5" />
+                                  )}
+                                  <span>Enviar p/ Acabamento</span>
+                                </button>
+                              )}
+
+                              {item.productionStage === ProductionStage.POST_PROCESSING && (
+                                <button
+                                  onClick={() => handleAdvanceStage(item.id)}
+                                  disabled={isLoading || Boolean(loadingItemId)}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-800 disabled:text-slate-500 text-white font-semibold text-xs transition shadow-md shadow-cyan-950/40 cursor-pointer disabled:cursor-not-allowed"
+                                  title="Finalizar e marcar como pronta"
+                                >
+                                  {isLoading ? (
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  ) : (
+                                    <Check className="w-3.5 h-3.5" />
+                                  )}
+                                  <span>Concluir Peça</span>
+                                </button>
+                              )}
+
+                              {/* Atalho direto para Concluir Peça (Marcar Pronto) se ainda em QUEUED ou PRINTING */}
+                              {item.productionStage !== ProductionStage.POST_PROCESSING && (
+                                <button
+                                  onClick={() => handleDirectComplete(item.id)}
+                                  disabled={isLoading || Boolean(loadingItemId)}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-emerald-400 hover:text-emerald-300 border border-slate-800 text-xs font-semibold transition cursor-pointer disabled:cursor-not-allowed"
+                                  title="Pular etapas e marcar diretamente como pronta"
+                                >
+                                  <Check className="w-3 h-3" />
+                                  <span className="hidden sm:inline">Pronto</span>
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}

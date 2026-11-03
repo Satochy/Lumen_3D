@@ -280,6 +280,7 @@ export async function toggleOrderItemReadyAction(
     }
 
     revalidatePath('/admin/orders')
+    revalidatePath('/admin/production')
     revalidatePath('/admin')
     revalidatePath('/profile/orders')
 
@@ -322,6 +323,7 @@ export async function updateOrderTrackingAction(
     })
 
     revalidatePath('/admin/orders')
+    revalidatePath('/admin/production')
     revalidatePath('/admin')
     revalidatePath('/profile/orders')
 
