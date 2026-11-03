@@ -36,6 +36,7 @@ export interface SerializedAdminOrderItem {
   isMadeToOrder: boolean
   productionDays: number | null
   isReady: boolean
+  productionStatus?: string
   readyAt: string | null
   readyByUserId: string | null
   product: {

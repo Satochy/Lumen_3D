@@ -3,7 +3,7 @@
 import { getCurrentUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
-import { ProductionStage } from '@prisma/client'
+import { OrderItemProductionStatus } from '@prisma/client'
 
 export interface ProductionQueueItem {
   id: string
@@ -14,7 +14,7 @@ export interface ProductionQueueItem {
   priceUnit: number
   isMadeToOrder: boolean
   productionDays: number | null
-  productionStage: ProductionStage
+  productionStatus: OrderItemProductionStatus
   isReady: boolean
   readyAt: string | null
   readyByUserId: string | null
@@ -49,16 +49,16 @@ export type PendingProductionItem = ProductionQueueItem
 /**
  * Ordem natural de progressão das etapas na oficina 3D
  */
-const STAGE_PROGRESSION: Record<ProductionStage, ProductionStage | null> = {
-  QUEUED: ProductionStage.PRINTING,
-  PRINTING: ProductionStage.POST_PROCESSING,
-  POST_PROCESSING: ProductionStage.COMPLETED,
-  COMPLETED: null,
+const STATUS_PROGRESSION: Record<OrderItemProductionStatus, OrderItemProductionStatus | null> = {
+  QUEUED: OrderItemProductionStatus.PRINTING,
+  PRINTING: OrderItemProductionStatus.POST_PROCESSING,
+  POST_PROCESSING: OrderItemProductionStatus.READY,
+  READY: null,
 }
 
 /**
  * Consulta todos os itens sob encomenda ativos e concluídos na Fila de Produção.
- * Ordenado por FIFO e status operacional.
+ * Ordenado por status operacional e FIFO (mais antigos primeiro).
  */
 export async function getProductionQueueData(): Promise<{
   success: boolean
@@ -113,8 +113,8 @@ export async function getProductionQueueData(): Promise<{
         },
       },
       orderBy: [
-        { isReady: 'asc' }, // Itens em aberto primeiro
-        { order: { createdAt: 'asc' } }, // FIFO: Mais antigos primeiro
+        { productionStatus: 'asc' },
+        { order: { createdAt: 'asc' } },
       ],
     })
 
@@ -127,8 +127,8 @@ export async function getProductionQueueData(): Promise<{
       priceUnit: Number(item.priceUnit),
       isMadeToOrder: item.isMadeToOrder,
       productionDays: item.productionDays,
-      productionStage: item.productionStage,
-      isReady: item.isReady,
+      productionStatus: item.productionStatus,
+      isReady: item.productionStatus === OrderItemProductionStatus.READY,
       readyAt: item.readyAt ? item.readyAt.toISOString() : null,
       readyByUserId: item.readyByUserId,
       variantAttributesSnapshot:
@@ -167,18 +167,19 @@ export async function getPendingProductionItems(): Promise<{
 }
 
 /**
- * Atualiza a etapa granular de produção de um OrderItem:
- * - QUEUED -> PRINTING -> POST_PROCESSING -> COMPLETED
- * - Se atingir COMPLETED: atualiza isReady: true, readyAt e readyByUserId.
- * - VERIFICAÇÃO MÁGICA: Se todos os itens sob encomenda do pedido ficarem COMPLETED,
+ * Atualiza o status granular de produção de um OrderItem:
+ * - QUEUED -> PRINTING -> POST_PROCESSING -> READY
+ * - Se atingir READY: atualiza readyAt e readyByUserId.
+ * - VERIFICAÇÃO AUTOMÁTICA: Se todos os itens sob encomenda do pedido ficarem READY,
  *   avança o status logístico do Order para READY_FOR_SHIPPING.
  */
-export async function updateItemProductionStageAction(
+export async function updateItemProductionStatusAction(
   orderItemId: string,
-  newStage: ProductionStage
+  newStatus: OrderItemProductionStatus
 ): Promise<{
   success: boolean
-  newStage?: ProductionStage
+  newStatus?: OrderItemProductionStatus
+  newStage?: OrderItemProductionStatus
   orderMovedToReady?: boolean
   error?: string
 }> {
@@ -203,15 +204,14 @@ export async function updateItemProductionStageAction(
       return { success: false, error: 'Item de pedido não encontrado.' }
     }
 
-    const isCompleting = newStage === ProductionStage.COMPLETED
+    const isCompleting = newStatus === OrderItemProductionStatus.READY
     const now = new Date()
 
-    // 1. Atualizar o item para a nova etapa granular
+    // 1. Atualizar o item para o novo status granular
     await prisma.orderItem.update({
       where: { id: orderItemId },
       data: {
-        productionStage: newStage,
-        isReady: isCompleting,
+        productionStatus: newStatus,
         readyAt: isCompleting ? now : null,
         readyByUserId: isCompleting ? user.id : null,
       },
@@ -219,7 +219,7 @@ export async function updateItemProductionStageAction(
 
     let orderMovedToReady = false
 
-    // 2. Se a peça foi finalizada (COMPLETED), verificar se todas as peças do pedido estão concluídas
+    // 2. Se a peça foi finalizada (READY), verificar se todas as peças sob encomenda do pedido estão concluídas
     if (isCompleting) {
       const allOrderItems = await prisma.orderItem.findMany({
         where: { orderId: targetItem.orderId },
@@ -230,7 +230,7 @@ export async function updateItemProductionStageAction(
         .every((i) =>
           i.id === orderItemId
             ? true
-            : i.productionStage === ProductionStage.COMPLETED || i.isReady
+            : i.productionStatus === OrderItemProductionStatus.READY
         )
 
       if (
@@ -245,10 +245,10 @@ export async function updateItemProductionStageAction(
           where: {
             orderId: targetItem.orderId,
             isMadeToOrder: false,
-            isReady: false,
+            productionStatus: { not: OrderItemProductionStatus.READY },
           },
           data: {
-            isReady: true,
+            productionStatus: OrderItemProductionStatus.READY,
             readyAt: now,
             readyByUserId: user.id,
           },
@@ -276,57 +276,70 @@ export async function updateItemProductionStageAction(
       }
     }
 
-    // 3. Revalidar rotas
+    // 3. Revalidar rotas administrativas e de perfil
     revalidatePath('/admin/production')
     revalidatePath('/admin/orders')
     revalidatePath('/admin')
+    revalidatePath('/profile/orders')
 
-    return { success: true, newStage, orderMovedToReady }
+    return {
+      success: true,
+      newStatus,
+      newStage: newStatus,
+      orderMovedToReady,
+    }
   } catch (error) {
-    console.error('Erro ao atualizar etapa de produção:', error)
+    console.error('Erro ao atualizar status de produção:', error)
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Falha ao atualizar etapa.',
+      error: error instanceof Error ? error.message : 'Falha ao atualizar status.',
     }
   }
 }
 
+// Alias para compatibilidade com chamadas existentes
+export const updateItemProductionStageAction = updateItemProductionStatusAction
+
 /**
- * Avança o item para a próxima etapa na esteira da oficina 3D:
- * QUEUED -> PRINTING -> POST_PROCESSING -> COMPLETED
+ * Avança o item para o próximo status na esteira da oficina 3D:
+ * QUEUED -> PRINTING -> POST_PROCESSING -> READY
  */
-export async function advanceItemStageAction(
+export async function advanceItemStatusAction(
   orderItemId: string
 ): Promise<{
   success: boolean
-  newStage?: ProductionStage
+  newStatus?: OrderItemProductionStatus
+  newStage?: OrderItemProductionStatus
   orderMovedToReady?: boolean
   error?: string
 }> {
   const item = await prisma.orderItem.findUnique({
     where: { id: orderItemId },
-    select: { productionStage: true },
+    select: { productionStatus: true },
   })
 
   if (!item) {
     return { success: false, error: 'Item não encontrado.' }
   }
 
-  const nextStage = STAGE_PROGRESSION[item.productionStage]
-  if (!nextStage) {
-    return { success: false, error: 'O item já está na etapa final (Concluído).' }
+  const nextStatus = STATUS_PROGRESSION[item.productionStatus]
+  if (!nextStatus) {
+    return { success: false, error: 'O item já está no status final (Pronto/Concluído).' }
   }
 
-  return updateItemProductionStageAction(orderItemId, nextStage)
+  return updateItemProductionStatusAction(orderItemId, nextStatus)
 }
 
+// Alias para compatibilidade com chamadas existentes
+export const advanceItemStageAction = advanceItemStatusAction
+
 /**
- * Mantido para compatibilidade retroativa: marca como pronto (COMPLETED)
+ * Mantido para compatibilidade retroativa: marca como pronto (READY)
  */
 export async function markItemReadyAction(
   orderItemId: string
 ): Promise<{ success: boolean; orderMovedToReady?: boolean; error?: string }> {
-  return updateItemProductionStageAction(orderItemId, ProductionStage.COMPLETED)
+  return updateItemProductionStatusAction(orderItemId, OrderItemProductionStatus.READY)
 }
 
 /**
@@ -335,5 +348,5 @@ export async function markItemReadyAction(
 export async function unmarkItemReadyAction(
   orderItemId: string
 ): Promise<{ success: boolean; error?: string }> {
-  return updateItemProductionStageAction(orderItemId, ProductionStage.QUEUED)
+  return updateItemProductionStatusAction(orderItemId, OrderItemProductionStatus.QUEUED)
 }

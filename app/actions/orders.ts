@@ -245,12 +245,14 @@ export async function toggleOrderItemReadyAction(
       return { success: false, error: 'Item não encontrado.' }
     }
 
-    const newReadyState = !item.isReady
+    const isCurrentlyReady = item.productionStatus === 'READY'
+    const newReadyState = !isCurrentlyReady
+    const newStatus = newReadyState ? 'READY' : 'QUEUED'
 
     await prisma.orderItem.update({
       where: { id: orderItemId },
       data: {
-        isReady: newReadyState,
+        productionStatus: newStatus,
         readyAt: newReadyState ? new Date() : null,
         readyByUserId: newReadyState ? admin.id : null,
       },
@@ -262,7 +264,7 @@ export async function toggleOrderItemReadyAction(
     if (newReadyState) {
       const allOtherMadeToOrderReady = item.order.items
         .filter((i) => i.id !== orderItemId && i.isMadeToOrder)
-        .every((i) => i.isReady)
+        .every((i) => i.productionStatus === 'READY')
 
       if (
         allOtherMadeToOrderReady &&

@@ -96,7 +96,7 @@ export default async function AdminDashboardPage() {
             productTitle: true,
             quantity: true,
             isMadeToOrder: true,
-            isReady: true,
+            productionStatus: true,
           },
         },
       },

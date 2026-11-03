@@ -32,11 +32,11 @@ enum LogisticsStatus {
 }
 
 
-enum ProductionStage {
+enum OrderItemProductionStatus {
   QUEUED
   PRINTING
   POST_PROCESSING
-  COMPLETED
+  READY
 }
 
 enum LeadStatus {
@@ -266,10 +266,9 @@ model OrderItem {
   variantId                 String?
   variant                   Variant?  @relation(fields: [variantId], references: [id])
   variantAttributesSnapshot Json?
-  isReady                   Boolean   @default(false)
   readyAt                   DateTime?
   readyByUserId             String?
-  productionStage           ProductionStage @default(QUEUED)
+  productionStatus          OrderItemProductionStatus @default(QUEUED)
 
   stockReservation StockReservation?
 

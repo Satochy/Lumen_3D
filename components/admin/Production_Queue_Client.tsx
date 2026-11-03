@@ -18,11 +18,11 @@ import {
   ExternalLink,
   Lock,
 } from 'lucide-react'
-import { ProductionStage } from '@prisma/client'
+import { OrderItemProductionStatus } from '@prisma/client'
 import {
   type ProductionQueueItem,
-  advanceItemStageAction,
-  updateItemProductionStageAction,
+  advanceItemStatusAction,
+  updateItemProductionStatusAction,
 } from '@/app/actions/production_actions'
 
 interface ProductionQueueClientProps {
@@ -31,8 +31,8 @@ interface ProductionQueueClientProps {
 
 type TabKey = 'todos' | 'na_fila' | 'imprimindo' | 'pos_processamento' | 'concluidos'
 
-const stageBadges: Record<
-  ProductionStage,
+const statusBadges: Record<
+  OrderItemProductionStatus,
   { label: string; style: string; dot: string }
 > = {
   QUEUED: {
@@ -50,7 +50,7 @@ const stageBadges: Record<
     style: 'bg-[#221035] text-purple-300 border-purple-900/60',
     dot: 'bg-purple-400',
   },
-  COMPLETED: {
+  READY: {
     label: 'Concluído',
     style: 'bg-[#062c1d] text-emerald-300 border-emerald-900/70',
     dot: 'bg-emerald-400',
@@ -132,36 +132,36 @@ export default function Production_Queue_Client({
     return Math.floor(diffTime / (1000 * 60 * 60 * 24))
   }
 
-  // Contadores por Etapa Real de Produção
+  // Contadores por Status Real de Produção
   const activeItemsCount = items.filter(
-    (i) => i.productionStage !== ProductionStage.COMPLETED
+    (i) => i.productionStatus !== OrderItemProductionStatus.READY
   ).length
   const naFilaCount = items.filter(
-    (i) => i.productionStage === ProductionStage.QUEUED
+    (i) => i.productionStatus === OrderItemProductionStatus.QUEUED
   ).length
   const imprimindoCount = items.filter(
-    (i) => i.productionStage === ProductionStage.PRINTING
+    (i) => i.productionStatus === OrderItemProductionStatus.PRINTING
   ).length
   const posProcessamentoCount = items.filter(
-    (i) => i.productionStage === ProductionStage.POST_PROCESSING
+    (i) => i.productionStatus === OrderItemProductionStatus.POST_PROCESSING
   ).length
   const concluidosCount = items.filter(
-    (i) => i.productionStage === ProductionStage.COMPLETED
+    (i) => i.productionStatus === OrderItemProductionStatus.READY
   ).length
 
   // Filtragem ativa por tab e busca
   const filteredItems = items.filter((item) => {
     if (activeTab === 'todos') {
       // "Todos" mostra todos os itens ativos na oficina
-      if (item.productionStage === ProductionStage.COMPLETED) return false
+      if (item.productionStatus === OrderItemProductionStatus.READY) return false
     } else if (activeTab === 'na_fila') {
-      if (item.productionStage !== ProductionStage.QUEUED) return false
+      if (item.productionStatus !== OrderItemProductionStatus.QUEUED) return false
     } else if (activeTab === 'imprimindo') {
-      if (item.productionStage !== ProductionStage.PRINTING) return false
+      if (item.productionStatus !== OrderItemProductionStatus.PRINTING) return false
     } else if (activeTab === 'pos_processamento') {
-      if (item.productionStage !== ProductionStage.POST_PROCESSING) return false
+      if (item.productionStatus !== OrderItemProductionStatus.POST_PROCESSING) return false
     } else if (activeTab === 'concluidos') {
-      if (item.productionStage !== ProductionStage.COMPLETED) return false
+      if (item.productionStatus !== OrderItemProductionStatus.READY) return false
     }
 
     if (searchTerm.trim()) {
@@ -186,18 +186,18 @@ export default function Production_Queue_Client({
 
     startTransition(async () => {
       try {
-        const res = await advanceItemStageAction(orderItemId)
-        if (res.success && res.newStage) {
+        const res = await advanceItemStatusAction(orderItemId)
+        if (res.success && res.newStatus) {
           const nowStr = new Date().toISOString()
           setItems((prev) =>
             prev.map((i) =>
               i.id === orderItemId
                 ? {
                     ...i,
-                    productionStage: res.newStage as ProductionStage,
-                    isReady: res.newStage === ProductionStage.COMPLETED,
+                    productionStatus: res.newStatus as OrderItemProductionStatus,
+                    isReady: res.newStatus === OrderItemProductionStatus.READY,
                     readyAt:
-                      res.newStage === ProductionStage.COMPLETED ? nowStr : i.readyAt,
+                      res.newStatus === OrderItemProductionStatus.READY ? nowStr : i.readyAt,
                   }
                 : i
             )
@@ -229,9 +229,9 @@ export default function Production_Queue_Client({
 
     startTransition(async () => {
       try {
-        const res = await updateItemProductionStageAction(
+        const res = await updateItemProductionStatusAction(
           orderItemId,
-          ProductionStage.COMPLETED
+          OrderItemProductionStatus.READY
         )
         if (res.success) {
           const nowStr = new Date().toISOString()
@@ -240,7 +240,7 @@ export default function Production_Queue_Client({
               i.id === orderItemId
                 ? {
                     ...i,
-                    productionStage: ProductionStage.COMPLETED,
+                    productionStatus: OrderItemProductionStatus.READY,
                     isReady: true,
                     readyAt: nowStr,
                   }
@@ -456,7 +456,7 @@ export default function Production_Queue_Client({
                 {filteredItems.map((item) => {
                   const createdDate = new Date(item.order.createdAt)
                   const elapsedDays = getElapsedDays(item.order.createdAt)
-                  const isCompleted = item.productionStage === ProductionStage.COMPLETED
+                  const isCompleted = item.productionStatus === OrderItemProductionStatus.READY
                   const isOverdue =
                     item.productionDays &&
                     elapsedDays > item.productionDays &&
@@ -470,7 +470,7 @@ export default function Production_Queue_Client({
                     : null
 
                   const badge =
-                    stageBadges[item.productionStage] || stageBadges.QUEUED
+                    statusBadges[item.productionStatus] || statusBadges.QUEUED
                   const isLoading = loadingItemId === item.id
 
                   return (
@@ -583,7 +583,7 @@ export default function Production_Queue_Client({
                         )}
                       </td>
 
-                      {/* Coluna 5: Status Operacional (Badge da Etapa Real) */}
+                      {/* Coluna 5: Status Operacional (Badge do Status Real) */}
                       <td className="py-3.5 px-4">
                         <span
                           className={`px-2.5 py-1 rounded-lg text-[11px] font-medium border inline-flex items-center gap-1.5 ${badge.style}`}
@@ -608,7 +608,7 @@ export default function Production_Queue_Client({
                             /* Etapas Ativas: Botão de Avanço na Esteira + Atalho Concluir */
                             <div className="flex items-center justify-end gap-1.5">
                               {/* Botão de Avançar Etapa */}
-                              {item.productionStage === ProductionStage.QUEUED && (
+                              {item.productionStatus === OrderItemProductionStatus.QUEUED && (
                                 <button
                                   onClick={() => handleAdvanceStage(item.id)}
                                   disabled={isLoading || Boolean(loadingItemId)}
@@ -624,7 +624,7 @@ export default function Production_Queue_Client({
                                 </button>
                               )}
 
-                              {item.productionStage === ProductionStage.PRINTING && (
+                              {item.productionStatus === OrderItemProductionStatus.PRINTING && (
                                 <button
                                   onClick={() => handleAdvanceStage(item.id)}
                                   disabled={isLoading || Boolean(loadingItemId)}
@@ -640,7 +640,7 @@ export default function Production_Queue_Client({
                                 </button>
                               )}
 
-                              {item.productionStage === ProductionStage.POST_PROCESSING && (
+                              {item.productionStatus === OrderItemProductionStatus.POST_PROCESSING && (
                                 <button
                                   onClick={() => handleAdvanceStage(item.id)}
                                   disabled={isLoading || Boolean(loadingItemId)}
@@ -657,7 +657,7 @@ export default function Production_Queue_Client({
                               )}
 
                               {/* Atalho direto para Concluir Peça (Marcar Pronto) se ainda em QUEUED ou PRINTING */}
-                              {item.productionStage !== ProductionStage.POST_PROCESSING && (
+                              {item.productionStatus !== OrderItemProductionStatus.POST_PROCESSING && (
                                 <button
                                   onClick={() => handleDirectComplete(item.id)}
                                   disabled={isLoading || Boolean(loadingItemId)}
