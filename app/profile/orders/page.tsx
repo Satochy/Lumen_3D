@@ -18,6 +18,7 @@ const paymentLabels: Record<PaymentStatus, { label: string; style: string }> = {
 
 const logisticsLabels: Record<LogisticsStatus, { label: string; style: string }> = {
   PREPARING: { label: 'Preparando / Na Fila', style: 'bg-slate-500/10 text-slate-300 border-slate-500/20' },
+  PRODUCING: { label: 'Em Produção', style: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' },
   PRINTING: { label: 'Em Produção (Impressão 3D)', style: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
   POST_PROCESSING: { label: 'Em Acabamento', style: 'bg-purple-500/10 text-purple-400 border-purple-500/20' },
   READY_FOR_SHIPPING: { label: 'Pronto para Envio', style: 'bg-teal-500/10 text-teal-400 border-teal-500/20' },

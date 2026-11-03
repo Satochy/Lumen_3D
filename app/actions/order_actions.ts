@@ -1,13 +1,14 @@
 'use server'
 
-import { createHash } from 'crypto'
+import { createHash, randomUUID } from 'crypto'
 import { z } from 'zod'
 import { revalidatePath } from 'next/cache'
-import { Prisma } from '@prisma/client'
+import { Prisma, OrderOccurrenceType, PaymentAttemptStatus } from '@prisma/client'
 import { MercadoPagoConfig, Payment } from 'mercadopago'
 import { prisma } from '@/lib/prisma'
 import { getCurrentUser } from '@/lib/auth'
 import { confirmApprovedPaymentInDb } from '@/lib/mercadopago_sync'
+import { getReservationTtlMinutes, reserveStockAtomically } from '@/lib/stock/reservation_service'
 import { calculateShippingAction, type ShippingOption } from './shipping_actions'
 import { isLocalShippingRegion, isValidCEP, sanitizeCEP } from '@/lib/shipping/shipping_utils'
 
@@ -407,8 +408,11 @@ export async function createOrderAction(input: OrderInput): Promise<CreateOrderR
       subtotal: Number(subtotalDecimal),
     }
 
-    // 9. Persistir Order (PENDING) + OrderItems numa única transação atômica
+    // 9. Persistir Order (PENDING), OrderItems e Reserva Temporária (TTL 30 min) numa única transação atômica
     // Regra D05: A baixa definitiva de estoque ocorre somente na confirmação do pagamento (webhook PAID).
+    const ttlMinutes = getReservationTtlMinutes()
+    const orderExpiresAt = new Date(Date.now() + ttlMinutes * 60 * 1000)
+
     const order = await prisma.$transaction(async (tx) => {
       const createdOrder = await tx.order.create({
         data: {
@@ -419,20 +423,37 @@ export async function createOrderAction(input: OrderInput): Promise<CreateOrderR
           shippingCost: verifiedShippingCost,
           isLocalDelivery,
           shippingAddressSnapshot,
+          expiresAt: orderExpiresAt,
         },
       })
 
+      const itemsWithIds = verifiedOrderItems.map((item) => ({
+        id: randomUUID(),
+        orderId: createdOrder.id,
+        productId: item.productId,
+        variantId: item.variantId,
+        productTitle: item.productTitle,
+        quantity: item.quantity,
+        priceUnit: item.priceUnit,
+        isMadeToOrder: item.isMadeToOrder,
+        productionDays: item.productionDays,
+      }))
+
       await tx.orderItem.createMany({
-        data: verifiedOrderItems.map((item) => ({
-          orderId: createdOrder.id,
-          productId: item.productId,
-          variantId: item.variantId,
-          productTitle: item.productTitle,
-          quantity: item.quantity,
-          priceUnit: item.priceUnit,
-          isMadeToOrder: item.isMadeToOrder,
-          productionDays: item.productionDays,
+        data: itemsWithIds,
+      })
+
+      await reserveStockAtomically(tx, {
+        orderId: createdOrder.id,
+        items: itemsWithIds.map((i) => ({
+          orderItemId: i.id,
+          productId: i.productId,
+          variantId: i.variantId,
+          quantity: i.quantity,
+          isMadeToOrder: i.isMadeToOrder,
         })),
+        ttlMinutes,
+        actorUserId: user.id,
       })
 
       return createdOrder
@@ -578,6 +599,13 @@ export async function processOrderPaymentAction(
       }
     }
 
+    if (order.expiresAt && order.expiresAt < new Date()) {
+      return {
+        success: false,
+        error: 'O prazo de pagamento deste pedido expirou. Por favor, refaça o pedido.',
+      }
+    }
+
     const transactionAmount = Number(order.totalAmount)
     if (transactionAmount <= 0) {
       return {
@@ -628,6 +656,21 @@ export async function processOrderPaymentAction(
       )
       .digest('hex')
 
+    const paymentAttempt = await prisma.paymentAttempt.create({
+      data: {
+        orderId: order.id,
+        provider: 'MERCADOPAGO',
+        environment: process.env.MP_ENVIRONMENT || 'sandbox',
+        method: formData.payment_method_id,
+        idempotencyKey,
+        expectedAmount: order.totalAmount,
+        currency: 'BRL',
+        installments: installmentsNumber,
+        status: PaymentAttemptStatus.INITIATED,
+        expiresAt: order.expiresAt,
+      },
+    })
+
     const paymentResponse = await paymentClient.create({
       body: {
         transaction_amount: transactionAmount,
@@ -676,11 +719,47 @@ export async function processOrderPaymentAction(
     const mpStatus = paymentResponse.status || 'pending'
     const mpPaymentId = paymentResponse.id ? String(paymentResponse.id) : undefined
 
+    await prisma.paymentAttempt.update({
+      where: { id: paymentAttempt.id },
+      data: {
+        externalPaymentId: mpPaymentId,
+        status:
+          mpStatus === 'approved'
+            ? PaymentAttemptStatus.APPROVED
+            : mpStatus === 'rejected'
+            ? PaymentAttemptStatus.REJECTED
+            : mpStatus === 'cancelled'
+            ? PaymentAttemptStatus.CANCELLED
+            : PaymentAttemptStatus.PENDING,
+        paidAmount:
+          mpStatus === 'approved' && paymentResponse.transaction_amount
+            ? new Prisma.Decimal(paymentResponse.transaction_amount)
+            : null,
+      },
+    })
+
     if (mpStatus === 'approved' && mpPaymentId) {
       if (paymentResponse.currency_id !== 'BRL') {
         console.error(
           `[SEGURANÇA FINANCEIRA] Moeda inválida retornada no pagamento ${mpPaymentId}: ${String(paymentResponse.currency_id)}.`
         )
+        await prisma.orderOccurrence.create({
+          data: {
+            orderId: order.id,
+            attemptId: paymentAttempt.id,
+            externalPaymentId: mpPaymentId,
+            type: OrderOccurrenceType.AMOUNT_OR_CURRENCY_MISMATCH,
+            description: `Moeda inválida recebida: ${String(paymentResponse.currency_id)} (esperado BRL).`,
+            metadata: {
+              currencyId: paymentResponse.currency_id,
+              paymentId: mpPaymentId,
+            },
+          },
+        })
+        await prisma.order.update({
+          where: { id: order.id },
+          data: { hasOpenOccurrence: true },
+        })
         return {
           success: false,
           error: 'Moeda de transação inválida para este pedido.',

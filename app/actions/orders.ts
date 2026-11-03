@@ -1,9 +1,10 @@
 'use server'
 
 import { z } from 'zod'
+import { randomUUID } from 'crypto'
 import { requireAdmin } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { LogisticsStatus } from '@prisma/client'
+import { LogisticsStatus, StockMovementType } from '@prisma/client'
 import { revalidatePath } from 'next/cache'
 
 const updateLogisticsSchema = z.object({
@@ -33,7 +34,7 @@ export async function getOrders() {
 }
 
 export async function updateLogisticsStatus(formData: FormData): Promise<void> {
-  await requireAdmin()
+  const admin = await requireAdmin()
 
   const parsed = updateLogisticsSchema.safeParse({
     orderId: formData.get('orderId'),
@@ -84,7 +85,7 @@ export async function updateLogisticsStatus(formData: FormData): Promise<void> {
     }
 
     // Se o pedido já estava PAID (e não estava CANCELLED) e está sendo alterado para CANCELLED,
-    // devolve atomicamente o estoque apenas dos itens de Pronta Entrega (!isMadeToOrder).
+    // devolve atomicamente o estoque apenas dos itens de Pronta Entrega (!isMadeToOrder) e registra RESTOCK_RETURN.
     if (
       existingOrder.paymentStatus === 'PAID' &&
       existingOrder.logisticsStatus !== 'CANCELLED' &&
@@ -99,6 +100,7 @@ export async function updateLogisticsStatus(formData: FormData): Promise<void> {
           },
           data: {
             logisticsStatus: 'CANCELLED',
+            cancelledAt: new Date(),
           },
         })
 
@@ -123,6 +125,22 @@ export async function updateLogisticsStatus(formData: FormData): Promise<void> {
             await tx.product.updateMany({
               where: { id: item.productId },
               data: { stock: { increment: item.quantity } },
+            })
+          }
+
+          if (item.productId) {
+            await tx.stockMovement.create({
+              data: {
+                idempotencyKey: `restock-cancel-${orderId}-${item.id}-${randomUUID()}`,
+                productId: item.productId,
+                variantId: item.variantId ?? null,
+                orderId,
+                orderItemId: item.id,
+                actorUserId: admin.id,
+                type: StockMovementType.RESTOCK_RETURN,
+                quantity: item.quantity,
+                reason: 'Cancelamento administrativo de pedido pago (estorno de pronta entrega)',
+              },
             })
           }
         }

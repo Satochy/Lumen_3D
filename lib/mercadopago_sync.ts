@@ -1,6 +1,7 @@
-import { Prisma } from '@prisma/client'
+import { Prisma, OrderOccurrenceType, PaymentAttemptStatus, WebhookProcessingStatus, StockMovementType } from '@prisma/client'
 import { MercadoPagoConfig, Payment } from 'mercadopago'
 import { prisma } from '@/lib/prisma'
+import { confirmReservationAtomically } from '@/lib/stock/reservation_service'
 
 /**
  * Identifica se um produto/item é Sob Encomenda (não baixa estoque físico pronto)
@@ -16,12 +17,14 @@ function isMadeToOrderProduct(product?: {
  * Confirma de forma atômica e idempotente o pagamento aprovado de um pedido.
  *
  * Regras (Documento-Mestre D02 a D07):
+ * - Trava atômica no banco: `paymentStatus: { not: 'PAID' }`.
  * - Verifica idempotência em PaymentWebhookLog pelo ID do pagamento (eventId @unique).
- * - Valida que externalReference coincide obrigatoriamente com order.id do banco.
- * - Valida integridade financeira (transaction_amount contra order.totalAmount em Prisma.Decimal).
- * - Atualiza Order.paymentStatus para 'PAID'.
- * - Para itens de Pronta Entrega, efetua a baixa atômica condicional de stock (produto ou variante).
- * - Para itens Sob Encomenda, não altera o estoque (vai para a fila de produção no Admin).
+ * - Valida externalReference contra order.id. Se divergente, registra OrderOccurrence e rejeita.
+ * - Valida moeda (BRL) e transaction_amount contra order.totalAmount. Se divergente, registra OrderOccurrence.
+ * - Se o pedido já estiver CANCELLED, registra OrderOccurrence (LATE_PAYMENT_AFTER_CANCEL).
+ * - Consome a reserva de estoque chamando `confirmReservationAtomically` (decrementa stock e reservedStock).
+ * - Atualiza Order para PAID (`paidAt: now`, `externalPaymentId`).
+ * - Atualiza PaymentAttempt para APPROVED.
  */
 export async function confirmApprovedPaymentInDb(params: {
   orderId: string
@@ -51,7 +54,7 @@ export async function confirmApprovedPaymentInDb(params: {
       },
     })
 
-    if (existingLog) {
+    if (existingLog && existingLog.processingStatus === WebhookProcessingStatus.PROCESSED) {
       return { confirmed: false, alreadyProcessed: true }
     }
 
@@ -71,21 +74,75 @@ export async function confirmApprovedPaymentInDb(params: {
       throw new Error(`Pedido "${orderId}" não encontrado no banco de dados.`)
     }
 
+    // Se o pedido já está pago, não reprocessa
+    if (order.paymentStatus === 'PAID') {
+      return { confirmed: false, alreadyProcessed: true }
+    }
+
+    // Se o pedido já estava cancelado, registra ocorrência de pagamento tardio
+    if (order.logisticsStatus === 'CANCELLED') {
+      await tx.orderOccurrence.create({
+        data: {
+          orderId: order.id,
+          externalPaymentId: cleanPaymentId,
+          type: OrderOccurrenceType.LATE_PAYMENT_AFTER_CANCEL,
+          description: `Pagamento recebido após cancelamento do pedido (Pagamento ID: ${cleanPaymentId}).`,
+          metadata: {
+            paymentId: cleanPaymentId,
+            transactionAmount: String(transactionAmount),
+            currencyId,
+          },
+        },
+      })
+      await tx.order.update({
+        where: { id: order.id },
+        data: { hasOpenOccurrence: true },
+      })
+      throw new Error('Pagamento rejeitado: pedido cancelado anteriormente.')
+    }
+
     // 2. Validação obrigatória de external_reference contra order.id do banco
     if (!cleanExternalRef || cleanExternalRef !== order.id) {
-      console.error(
-        `[SEGURANÇA FINANCEIRA] external_reference divergente para o pagamento ${cleanPaymentId}: esperado "${order.id}", recebido "${cleanExternalRef}".`
-      )
+      await tx.orderOccurrence.create({
+        data: {
+          orderId: order.id,
+          externalPaymentId: cleanPaymentId,
+          type: OrderOccurrenceType.COLLECTOR_OR_ENV_MISMATCH,
+          description: `external_reference divergente: esperado "${order.id}", recebido "${cleanExternalRef}".`,
+          metadata: {
+            paymentId: cleanPaymentId,
+            expected: order.id,
+            received: cleanExternalRef,
+          },
+        },
+      })
+      await tx.order.update({
+        where: { id: order.id },
+        data: { hasOpenOccurrence: true },
+      })
       throw new Error(
         'O external_reference do pagamento não coincide com o ID do pedido no banco.'
       )
     }
 
-    // 3. Validação obrigatória de moeda (BRL) e do valor pago (transaction_amount) contra order.totalAmount
+    // 3. Validação de moeda (BRL) e do valor pago (transaction_amount) contra order.totalAmount
     if (currencyId !== 'BRL') {
-      console.error(
-        `[SEGURANÇA FINANCEIRA] Moeda inválida no pagamento ${cleanPaymentId} do pedido ${order.id}: esperado "BRL", recebido "${String(currencyId)}".`
-      )
+      await tx.orderOccurrence.create({
+        data: {
+          orderId: order.id,
+          externalPaymentId: cleanPaymentId,
+          type: OrderOccurrenceType.AMOUNT_OR_CURRENCY_MISMATCH,
+          description: `Moeda inválida: esperada "BRL", recebida "${String(currencyId)}".`,
+          metadata: {
+            paymentId: cleanPaymentId,
+            currencyId,
+          },
+        },
+      })
+      await tx.order.update({
+        where: { id: order.id },
+        data: { hasOpenOccurrence: true },
+      })
       throw new Error(
         `Moeda do pagamento inválida (${String(currencyId)}). Apenas BRL é aceito.`
       )
@@ -103,9 +160,23 @@ export async function confirmApprovedPaymentInDb(params: {
         : new Prisma.Decimal(Number(transactionAmount).toFixed(2))
 
     if (!paidDecimal.isFinite() || !paidDecimal.equals(order.totalAmount)) {
-      console.error(
-        `[SEGURANÇA FINANCEIRA] Divergência de transaction_amount no pedido ${order.id}: esperado ${order.totalAmount.toFixed(2)}, recebido ${paidDecimal.toFixed(2)}.`
-      )
+      await tx.orderOccurrence.create({
+        data: {
+          orderId: order.id,
+          externalPaymentId: cleanPaymentId,
+          type: OrderOccurrenceType.AMOUNT_OR_CURRENCY_MISMATCH,
+          description: `Valor pago (${paidDecimal.toFixed(2)}) diverge do total do pedido (${order.totalAmount.toFixed(2)}).`,
+          metadata: {
+            paymentId: cleanPaymentId,
+            expected: order.totalAmount.toFixed(2),
+            received: paidDecimal.toFixed(2),
+          },
+        },
+      })
+      await tx.order.update({
+        where: { id: order.id },
+        data: { hasOpenOccurrence: true },
+      })
       throw new Error(
         `Valor pago (${paidDecimal.toFixed(2)}) diverge do total do pedido (${order.totalAmount.toFixed(2)}).`
       )
@@ -115,18 +186,17 @@ export async function confirmApprovedPaymentInDb(params: {
       Boolean(item.isMadeToOrder || isMadeToOrderProduct(item.product))
     )
 
-    // 4. Atualizar Order para PAID de forma atômica condicional (proteção contra Race Condition e transição inválida)
-    // Exige paymentStatus === 'PENDING' e logisticsStatus !== 'CANCELLED'.
-    // Regra D06/D07: Pedido somente de Pronta Entrega vai para READY_FOR_SHIPPING;
-    // pedido com item Sob Encomenda permanece na fila de produção (PREPARING).
+    // 4. Atualizar Order para PAID com trava atômica: paymentStatus: { not: 'PAID' }
     const result = await tx.order.updateMany({
       where: {
         id: order.id,
-        paymentStatus: 'PENDING',
+        paymentStatus: { not: 'PAID' },
         logisticsStatus: { not: 'CANCELLED' },
       },
       data: {
         paymentStatus: 'PAID',
+        paidAt: new Date(),
+        externalPaymentId: cleanPaymentId,
         ...(!hasMadeToOrderItem && order.logisticsStatus === 'PREPARING'
           ? { logisticsStatus: 'READY_FOR_SHIPPING' }
           : {}),
@@ -137,71 +207,103 @@ export async function confirmApprovedPaymentInDb(params: {
       return { confirmed: false, alreadyProcessed: true }
     }
 
-    // 5. Registrar evento no PaymentWebhookLog
+    // 5. Atualizar PaymentWebhookLog
     await tx.paymentWebhookLog.upsert({
       where: { eventId: cleanPaymentId },
-      update: { status: 'approved' },
+      update: {
+        status: 'approved',
+        processingStatus: WebhookProcessingStatus.PROCESSED,
+        orderId: order.id,
+        processedAt: new Date(),
+      },
       create: {
         eventId: cleanPaymentId,
         status: 'approved',
+        provider: 'MERCADOPAGO',
+        processingStatus: WebhookProcessingStatus.PROCESSED,
+        orderId: order.id,
+        processedAt: new Date(),
       },
     })
 
-    // 6. Iterar sobre os OrderItems: baixar estoque apenas de Pronta Entrega
+    // 6. Atualizar PaymentAttempt vinculado
+    await tx.paymentAttempt.updateMany({
+      where: {
+        orderId: order.id,
+        OR: [
+          { externalPaymentId: cleanPaymentId },
+          { status: { in: [PaymentAttemptStatus.INITIATED, PaymentAttemptStatus.PENDING, PaymentAttemptStatus.IN_PROCESS] } },
+        ],
+      },
+      data: {
+        externalPaymentId: cleanPaymentId,
+        status: PaymentAttemptStatus.APPROVED,
+        paidAmount: paidDecimal,
+        lastReconciledAt: new Date(),
+      },
+    })
+
+    // 7. Confirmar reserva de estoque atômica (decrementa stock e reservedStock simultaneamente)
+    await confirmReservationAtomically(tx, { orderId: order.id })
+
+    // 8. Para itens sem reserva prévia ativa (legado ou compra direta), efetua baixa física direta
+    const existingReservations = await tx.stockReservation.findMany({
+      where: { orderId: order.id },
+      select: { orderItemId: true },
+    })
+    const reservedOrderItemIds = new Set(existingReservations.map((r) => r.orderItemId))
+
     for (const item of order.items) {
       const isItemMadeToOrder = Boolean(
         item.isMadeToOrder || isMadeToOrderProduct(item.product)
       )
-
       if (isItemMadeToOrder || !item.productId || !item.product) {
-        // Produto Sob Encomenda ou item personalizado: não mexe no estoque físico; segue para fila de produção no Admin
+        continue
+      }
+
+      if (reservedOrderItemIds.has(item.id)) {
         continue
       }
 
       if (item.variantId) {
-        if (!item.variant || item.variant.stock < item.quantity) {
-          throw new Error(
-            `Estoque insuficiente para a variante "${item.variantId}" do item "${item.productTitle}" (disponível: ${item.variant?.stock ?? 0}, solicitado: ${item.quantity}).`
-          )
-        }
-
-        const updatedVariant = await tx.variant.updateMany({
-          where: {
-            id: item.variantId,
-            stock: { gte: item.quantity },
-          },
-          data: {
-            stock: { decrement: item.quantity },
-          },
-        })
-        if (updatedVariant.count === 0) {
+        const affected = await tx.$executeRaw`
+          UPDATE "variants"
+          SET "stock" = "stock" - ${item.quantity}
+          WHERE "id" = ${item.variantId}
+            AND "stock" >= ${item.quantity}
+        `
+        if (affected === 0) {
           throw new Error(
             `Estoque insuficiente para baixa da variante "${item.variantId}" do item "${item.productTitle}".`
           )
         }
       } else {
-        if (item.product.stock < item.quantity) {
-          throw new Error(
-            `Estoque insuficiente para o item "${item.productTitle}" (disponível: ${item.product.stock}, solicitado: ${item.quantity}).`
-          )
-        }
-
-        const updatedProduct = await tx.product.updateMany({
-          where: {
-            id: item.productId,
-            archivedAt: null,
-            stock: { gte: item.quantity },
-          },
-          data: {
-            stock: { decrement: item.quantity },
-          },
-        })
-        if (updatedProduct.count === 0) {
+        const affected = await tx.$executeRaw`
+          UPDATE "products"
+          SET "stock" = "stock" - ${item.quantity}
+          WHERE "id" = ${item.productId}
+            AND "archivedAt" IS NULL
+            AND "stock" >= ${item.quantity}
+        `
+        if (affected === 0) {
           throw new Error(
             `Estoque insuficiente para baixa do item "${item.productTitle}".`
           )
         }
       }
+
+      await tx.stockMovement.create({
+        data: {
+          idempotencyKey: `consume-direct-${item.id}-${cleanPaymentId}`,
+          productId: item.productId,
+          variantId: item.variantId,
+          orderId: order.id,
+          orderItemId: item.id,
+          type: StockMovementType.CONSUME_RESERVE,
+          quantity: item.quantity,
+          reason: 'Baixa definitiva direta por confirmação de pagamento',
+        },
+      })
     }
 
     return { confirmed: true, alreadyProcessed: false }
