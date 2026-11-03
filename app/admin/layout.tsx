@@ -1,56 +1,68 @@
-import Link from 'next/link'
 import React from 'react'
 import { requireAdmin } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import Admin_Sidebar from '@/components/admin/Admin_Sidebar'
+import Admin_Header from '@/components/admin/Admin_Header'
 
 export default async function AdminLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  await requireAdmin()
+  const adminUser = await requireAdmin()
+
+  // Buscar contagens em tempo real para os badges da Sidebar
+  const [productionCount, readyShippingCount, occurrencesCount] = await Promise.all([
+    prisma.order.count({
+      where: {
+        paymentStatus: 'PAID',
+        logisticsStatus: { in: ['PREPARING', 'PRODUCING', 'PRINTING', 'POST_PROCESSING'] },
+      },
+    }),
+    prisma.order.count({
+      where: {
+        logisticsStatus: 'READY_FOR_SHIPPING',
+      },
+    }),
+    prisma.order.count({
+      where: {
+        hasOpenOccurrence: true,
+      },
+    }),
+  ])
 
   return (
-    <div className="flex min-h-screen bg-[#050811] text-slate-100 font-sans">
-      {/* Sidebar Única */}
-      <aside className="w-64 border-r border-slate-800/80 p-6 flex flex-col gap-6 bg-[#050811] shrink-0">
-        <div>
-          <h2 className="text-xl font-bold text-amber-500 tracking-wider">
-            LÚMEN 3D
-          </h2>
-          <p className="text-xs text-slate-400">Painel de Controlo</p>
+    <div className="flex min-h-screen bg-[#040711] text-slate-100 font-sans selection:bg-cyan-500/30 selection:text-cyan-200 antialiased">
+      {/* Background Decorativo com Iluminação Sutil (Glow Radial Dark) */}
+      <div className="fixed inset-0 pointer-events-none z-0">
+        <div className="absolute top-0 left-1/4 w-[600px] h-[350px] bg-gradient-to-br from-cyan-500/5 via-blue-600/3 to-transparent blur-3xl rounded-full" />
+        <div className="absolute top-1/3 right-10 w-[500px] h-[300px] bg-gradient-to-br from-indigo-500/4 via-purple-600/2 to-transparent blur-3xl rounded-full" />
+      </div>
+
+      {/* Sidebar de Gestão com Backdrop Blur */}
+      <div className="relative z-20">
+        <Admin_Sidebar
+          adminUser={{
+            id: adminUser.id,
+            name: adminUser.name,
+            username: adminUser.username,
+            email: adminUser.email,
+            avatarUrl: adminUser.avatarUrl ?? null,
+          }}
+          counts={{
+            production: productionCount,
+            readyShipping: readyShippingCount,
+            occurrences: occurrencesCount,
+          }}
+        />
+      </div>
+
+      {/* Área Central / Conteúdo com Header Integrado */}
+      <main className="flex-1 p-6 sm:p-8 lg:p-10 overflow-y-auto relative z-10 transition-all duration-300 ease-in-out">
+        <div className="max-w-7xl mx-auto">
+          <Admin_Header />
+          {children}
         </div>
-
-        <nav className="flex flex-col gap-2">
-          <Link
-            href="/admin"
-            className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-sm font-medium transition"
-          >
-            Dashboard
-          </Link>
-          <Link
-            href="/admin/products"
-            className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-sm font-medium transition"
-          >
-            Gerenciar Produtos
-          </Link>
-          <Link
-            href="/admin/filaments"
-            className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-sm font-medium transition"
-          >
-            Estoque de Filamentos
-          </Link>
-          <Link
-            href="/admin/orders"
-            className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-sm font-medium transition"
-          >
-            Fila de Produção
-          </Link>
-        </nav>
-      </aside>
-
-      {/* Conteúdo Principal */}
-      <main className="flex-1 p-8 overflow-y-auto">
-        {children}
       </main>
     </div>
   )
