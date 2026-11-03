@@ -221,8 +221,8 @@ model FilamentStock {
 
 model Order {
   id                      String          @id @default(uuid())
-  userId                  String
-  user                    User            @relation(fields: [userId], references: [id])
+  userId                  String?
+  user                    User?           @relation(fields: [userId], references: [id])
   paymentStatus           PaymentStatus   @default(PENDING)
   logisticsStatus         LogisticsStatus @default(PREPARING)
   totalAmount             Decimal         @db.Decimal(10, 2)
@@ -230,7 +230,8 @@ model Order {
   shippingAddressSnapshot Json?
   trackingCode            String?
   isLocalDelivery         Boolean         @default(false)
-  isAssistedSale          Boolean         @default(false)
+  isAssistedSale            Boolean         @default(false)
+  assistedSaleExpectedEmail String?
   adminNotes              String?
   externalPaymentId       String?
   paymentMethod           String?

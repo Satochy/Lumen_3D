@@ -19,15 +19,26 @@ export default async function CheckoutOrderPage({
   const user = await getCurrentUser()
 
   if (!user) {
-    redirect('/login')
+    redirect(`/login?redirect=/marketplace/checkout/${id}`)
   }
 
   const order = await prisma.order.findFirst({
     where: {
       id,
-      userId: user.id,
+      OR: [
+        { userId: user.id },
+        { isAssistedSale: true, assistedSaleExpectedEmail: user.email },
+        { isAssistedSale: true, userId: null },
+        ...(user.role === 'ADMIN' ? [{ isAssistedSale: true }] : []),
+      ],
     },
     include: {
+      user: {
+        select: {
+          id: true,
+          email: true,
+        },
+      },
       items: {
         include: {
           product: {
@@ -43,6 +54,16 @@ export default async function CheckoutOrderPage({
 
   if (!order) {
     redirect('/marketplace')
+  }
+
+  // Se for venda assistida e ainda não possui vínculo de comprador, consolida com o usuário logado
+  if (order.isAssistedSale && (!order.userId || order.assistedSaleExpectedEmail === user.email)) {
+    if (order.userId !== user.id) {
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { userId: user.id },
+      })
+    }
   }
 
   let effectivePaymentStatus = order.paymentStatus

@@ -76,7 +76,7 @@ export interface SerializedShippingAddressSnapshot {
 
 export interface SerializedAdminOrder {
   id: string
-  userId: string
+  userId: string | null
   paymentStatus: PaymentStatus
   logisticsStatus: LogisticsStatus
   totalAmount: number

@@ -58,10 +58,16 @@ export async function createPreferenceAction(
     const order = await prisma.order.findFirst({
       where: {
         id: parsedId.data,
-        userId: user.id,
+        OR: [
+          { userId: user.id },
+          { isAssistedSale: true, assistedSaleExpectedEmail: user.email },
+          { isAssistedSale: true, userId: null },
+          ...(user.role === 'ADMIN' ? [{ isAssistedSale: true }] : []),
+        ],
       },
       include: {
         items: true,
+        user: true,
       },
     })
 
@@ -70,6 +76,26 @@ export async function createPreferenceAction(
         success: false,
         error: 'Pedido não encontrado ou não pertence à sua conta.',
       }
+    }
+
+    // Bloquear criação de preferência se o link/reserva já expirou
+    if (
+      order.expiresAt &&
+      new Date(order.expiresAt) < new Date() &&
+      order.paymentStatus === 'PENDING'
+    ) {
+      return {
+        success: false,
+        error: 'Este link de checkout expirou. Entre em contato com a Lúmen 3D para gerar uma nova cotação.',
+      }
+    }
+
+    // Se for venda assistida e o usuário autenticado for o cliente correspondente, consolida o userId
+    if (order.isAssistedSale && order.userId !== user.id) {
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { userId: user.id },
+      })
     }
 
     const mpConfig = new MercadoPagoConfig({
