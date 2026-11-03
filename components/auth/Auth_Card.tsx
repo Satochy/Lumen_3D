@@ -3,6 +3,7 @@
 import { useState, useActionState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { signIn, signUp, requestPasswordReset } from '@/app/actions/auth_actions'
 import { Mail, Lock, User, AtSign, Sparkles, ArrowLeft, Eye, EyeOff, KeyRound } from 'lucide-react'
 
@@ -13,6 +14,10 @@ interface AuthCardProps {
 const PANEL_BACKGROUND_IMAGE = '/bg_login.jpg'
 
 export default function Auth_Card({ initialMode = 'login' }: AuthCardProps) {
+  const searchParams = useSearchParams()
+  const redirectParam = searchParams?.get('redirect') || searchParams?.get('redirectTo') || ''
+  const emailParam = searchParams?.get('email') || ''
+
   const [isSignUp, setIsSignUp] = useState(initialMode === 'register')
   const [isForgotPassword, setIsForgotPassword] = useState(false)
   const [showLoginPassword, setShowLoginPassword] = useState(false)
@@ -92,6 +97,7 @@ export default function Auth_Card({ initialMode = 'login' }: AuthCardProps) {
           </div>
 
           <form action={registerAction} className="mt-5 space-y-3.5">
+            <input type="hidden" name="redirectTo" value={redirectParam} />
             {registerState?.error && (
               <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-xs text-rose-400 text-center">
                 {registerState.error}
@@ -129,6 +135,7 @@ export default function Auth_Card({ initialMode = 'login' }: AuthCardProps) {
                 name="email"
                 type="email"
                 required
+                defaultValue={emailParam}
                 placeholder="Seu melhor e-mail"
                 className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-950/90 border border-slate-800/90 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition"
               />
@@ -265,6 +272,7 @@ export default function Auth_Card({ initialMode = 'login' }: AuthCardProps) {
               </div>
 
               <form action={loginAction} className="mt-6 space-y-4">
+                <input type="hidden" name="redirectTo" value={redirectParam} />
                 {loginState?.error && (
                   <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-xs text-rose-400 text-center">
                     {loginState.error}
@@ -279,6 +287,7 @@ export default function Auth_Card({ initialMode = 'login' }: AuthCardProps) {
                       name="email"
                       type="email"
                       required
+                      defaultValue={emailParam}
                       placeholder="insira seu email"
                       className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-950/90 border border-slate-800/90 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition"
                     />

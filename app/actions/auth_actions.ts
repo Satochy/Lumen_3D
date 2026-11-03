@@ -64,8 +64,14 @@ export async function signIn(_prevState: any, formData: FormData) {
 
   await ensureProfileInDB()
 
+  const redirectTo = formData.get('redirectTo') as string | null
+  const safeRedirect =
+    redirectTo && redirectTo.startsWith('/') && !redirectTo.startsWith('//')
+      ? redirectTo
+      : '/'
+
   revalidatePath('/', 'layout')
-  redirect('/')
+  redirect(safeRedirect)
 }
 
 export async function signUp(_prevState: any, formData: FormData) {
@@ -115,8 +121,14 @@ export async function signUp(_prevState: any, formData: FormData) {
     console.error('Erro ao salvar no banco:', dbError)
   }
 
+  const redirectTo = formData.get('redirectTo') as string | null
+  const safeRedirect =
+    redirectTo && redirectTo.startsWith('/') && !redirectTo.startsWith('//')
+      ? redirectTo
+      : '/'
+
   revalidatePath('/', 'layout')
-  redirect('/')
+  redirect(safeRedirect)
 }
 
 export async function requestPasswordReset(
@@ -178,11 +190,15 @@ export async function updatePassword(
   redirect('/')
 }
 
-export async function signOut() {
+export async function signOut(redirectTo?: string) {
   const supabase = await createClient()
   await supabase.auth.signOut()
   revalidatePath('/', 'layout')
-  redirect('/')
+  const safeRedirect =
+    redirectTo && redirectTo.startsWith('/') && !redirectTo.startsWith('//')
+      ? redirectTo
+      : '/'
+  redirect(safeRedirect)
 }
 
 async function ensureProfileInDB() {

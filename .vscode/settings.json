@@ -1,6 +1,6 @@
 {
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true,
   "tailwindCSS.lint.suggestCanonicalClasses": "ignore",
   "python.terminal.useEnvFile": true
 }
-//criada somente pra calar a boca do corretor de sintaxe do VSCode, 
-// que insiste em reclamar de classes do TailwindCSS.

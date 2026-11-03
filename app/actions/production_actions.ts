@@ -223,6 +223,11 @@ export async function updateItemProductionStatusAction(
     if (isCompleting) {
       const allOrderItems = await prisma.orderItem.findMany({
         where: { orderId: targetItem.orderId },
+        select: {
+          id: true,
+          isMadeToOrder: true,
+          productionStatus: true,
+        },
       })
 
       const allMadeToOrderReady = allOrderItems

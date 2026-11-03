@@ -706,7 +706,7 @@ export default function Assisted_Sales_Client({
                           {isPaid ? (
                             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
                               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                              <span>PAID (Pago)</span>
+                              <span>Pago</span>
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-500/10 text-amber-300 border border-amber-500/30">
@@ -714,7 +714,7 @@ export default function Assisted_Sales_Client({
                                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
                                 <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
                               </span>
-                              <span>PENDING</span>
+                              <span>Aguardando</span>
                             </span>
                           )}
                         </td>

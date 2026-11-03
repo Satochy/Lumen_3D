@@ -232,10 +232,23 @@ export async function toggleOrderItemReadyAction(
 
     const item = await prisma.orderItem.findUnique({
       where: { id: orderItemId },
-      include: {
+      select: {
+        id: true,
+        orderId: true,
+        isMadeToOrder: true,
+        productionStatus: true,
         order: {
-          include: {
-            items: true,
+          select: {
+            id: true,
+            paymentStatus: true,
+            logisticsStatus: true,
+            items: {
+              select: {
+                id: true,
+                isMadeToOrder: true,
+                productionStatus: true,
+              },
+            },
           },
         },
       },

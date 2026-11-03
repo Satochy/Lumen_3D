@@ -32,10 +32,21 @@ export const updateSession = async (request: NextRequest) => {
   } = await supabase.auth.getUser()
 
   const pathname = request.nextUrl.pathname
-  const isProtectedRoute =
+  let isProtectedRoute =
     pathname.startsWith('/admin') ||
-    pathname.startsWith('/profile') ||
-    pathname.startsWith('/marketplace/checkout')
+    pathname.startsWith('/profile')
+
+  if (pathname.startsWith('/marketplace/checkout')) {
+    const match = pathname.match(/^\/marketplace\/checkout\/([a-zA-Z0-9_-]+)/)
+    const orderId = match ? match[1] : null
+    const isUnlocked = orderId
+      ? request.cookies.get(`unlocked_order_${orderId}`)?.value === 'true'
+      : false
+
+    if (!isUnlocked) {
+      isProtectedRoute = true
+    }
+  }
 
   if (!user && isProtectedRoute) {
     const loginUrl = request.nextUrl.clone()
