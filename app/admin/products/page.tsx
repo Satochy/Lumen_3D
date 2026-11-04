@@ -160,6 +160,7 @@ export default async function AdminProductsPage() {
                               target="_blank"
                               className="bg-slate-800 hover:bg-slate-700 text-slate-300 p-1.5 rounded-lg text-xs transition"
                               title="Visualizar na loja pública"
+                              aria-label={`Visualizar ${product.title} na loja pública`}
                             >
                               <ExternalLink className="w-3.5 h-3.5" />
                             </Link>

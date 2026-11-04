@@ -46,6 +46,7 @@ export default function Auth_Card({ initialMode = 'login' }: AuthCardProps) {
           src={PANEL_BACKGROUND_IMAGE}
           alt="Lúmen 3D Background"
           fill
+          sizes="100vw"
           className="object-cover object-center opacity-40 scale-105 pointer-events-none"
           priority
         />
@@ -112,6 +113,7 @@ export default function Auth_Card({ initialMode = 'login' }: AuthCardProps) {
                 required
                 minLength={3}
                 placeholder="Nome Completo"
+                aria-label="Nome completo"
                 className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-950/90 border border-slate-800/90 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition"
               />
             </div>
@@ -125,6 +127,7 @@ export default function Auth_Card({ initialMode = 'login' }: AuthCardProps) {
                 minLength={3}
                 maxLength={30}
                 placeholder="Nome de Usuário"
+                aria-label="Nome de usuário"
                 className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-950/90 border border-slate-800/90 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition"
               />
             </div>
@@ -137,6 +140,7 @@ export default function Auth_Card({ initialMode = 'login' }: AuthCardProps) {
                 required
                 defaultValue={emailParam}
                 placeholder="Seu melhor e-mail"
+                aria-label="Endereço de e-mail"
                 className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-950/90 border border-slate-800/90 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition"
               />
             </div>
@@ -149,6 +153,7 @@ export default function Auth_Card({ initialMode = 'login' }: AuthCardProps) {
                 required
                 minLength={8}
                 placeholder="Senha (mínimo 8 caracteres)"
+                aria-label="Senha de acesso"
                 className="w-full pl-10 pr-10 py-3 rounded-xl bg-slate-950/90 border border-slate-800/90 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition"
               />
               <button
@@ -233,6 +238,7 @@ export default function Auth_Card({ initialMode = 'login' }: AuthCardProps) {
                     type="email"
                     required
                     placeholder="seu@email.com"
+                    aria-label="E-mail para recuperação de acesso"
                     className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-950/90 border border-slate-800/90 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition"
                   />
                 </div>
@@ -289,6 +295,7 @@ export default function Auth_Card({ initialMode = 'login' }: AuthCardProps) {
                       required
                       defaultValue={emailParam}
                       placeholder="insira seu email"
+                      aria-label="E-mail"
                       className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-950/90 border border-slate-800/90 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition"
                     />
                   </div>
@@ -304,6 +311,7 @@ export default function Auth_Card({ initialMode = 'login' }: AuthCardProps) {
                       required
                       minLength={8}
                       placeholder="insira sua senha"
+                      aria-label="Senha"
                       className="w-full pl-10 pr-10 py-3 rounded-xl bg-slate-950/90 border border-slate-800/90 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition"
                     />
                     <button
@@ -323,6 +331,7 @@ export default function Auth_Card({ initialMode = 'login' }: AuthCardProps) {
                       type="checkbox"
                       name="rememberMe"
                       defaultChecked
+                      aria-label="Lembrar de mim"
                       className="w-3.5 h-3.5 rounded border-slate-700 bg-slate-950 accent-cyan-500 cursor-pointer"
                     />
                     <span>Lembrar de mim</span>
@@ -385,8 +394,8 @@ export default function Auth_Card({ initialMode = 'login' }: AuthCardProps) {
                 src={PANEL_BACKGROUND_IMAGE}
                 alt="Lúmen 3D Background"
                 fill
+                sizes="(max-width: 768px) 100vw, 50vw"
                 className="object-cover object-center opacity-25 scale-110 blur-[1px] pointer-events-none"
-                priority
               />
               <div className="absolute inset-0 bg-gradient-to-br from-cyan-950/85 via-[#070b16]/80 to-[#050811]/95" />
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(34,211,238,0.18),transparent_70%)]" />
@@ -404,6 +413,7 @@ export default function Auth_Card({ initialMode = 'login' }: AuthCardProps) {
                   alt="Mascote Lúmen 3D"
                   width={112}
                   height={112}
+                  sizes="112px"
                   className="object-contain drop-shadow-[0_10px_25px_rgba(34,211,238,0.35)]"
                 />
               </div>
@@ -438,6 +448,7 @@ export default function Auth_Card({ initialMode = 'login' }: AuthCardProps) {
                   alt="Mascote Lúmen 3D"
                   width={112}
                   height={112}
+                  sizes="112px"
                   className="object-contain drop-shadow-[0_10px_25px_rgba(34,211,238,0.35)]"
                 />
               </div>

@@ -221,16 +221,7 @@ export async function updateItemProductionStatusAction(
 
     // 2. Se a peça foi finalizada (READY), verificar se todas as peças sob encomenda do pedido estão concluídas
     if (isCompleting) {
-      const allOrderItems = await prisma.orderItem.findMany({
-        where: { orderId: targetItem.orderId },
-        select: {
-          id: true,
-          isMadeToOrder: true,
-          productionStatus: true,
-        },
-      })
-
-      const allMadeToOrderReady = allOrderItems
+      const allMadeToOrderReady = targetItem.order.items
         .filter((i) => i.isMadeToOrder)
         .every((i) =>
           i.id === orderItemId

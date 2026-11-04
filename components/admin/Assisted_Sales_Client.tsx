@@ -532,6 +532,7 @@ export default function Assisted_Sales_Client({
               placeholder="Buscar por e-mail, ID ou nome da peça..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              aria-label="Buscar por e-mail, ID ou nome da peça"
               className="w-full pl-9 pr-4 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-100 placeholder:text-slate-400 focus:outline-none focus:border-cyan-500"
             />
             {searchQuery && (
@@ -585,6 +586,7 @@ export default function Assisted_Sales_Client({
             <select
               value={originFilter}
               onChange={(e) => setOriginFilter(e.target.value as 'ALL' | OriginOption)}
+              aria-label="Filtrar por canal de origem"
               className="px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-cyan-500 cursor-pointer"
             >
               <option value="ALL">Todas Origens</option>
@@ -840,6 +842,7 @@ export default function Assisted_Sales_Client({
                       value={expectedEmail}
                       onChange={(e) => setExpectedEmail(e.target.value)}
                       placeholder="cliente@exemplo.com"
+                      aria-label="E-mail do Cliente"
                       className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-cyan-500"
                     />
                   </div>
@@ -852,6 +855,7 @@ export default function Assisted_Sales_Client({
                     <select
                       value={origin}
                       onChange={(e) => setOrigin(e.target.value as OriginOption)}
+                      aria-label="Canal de atendimento"
                       className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-cyan-500 cursor-pointer"
                     >
                       <option value="WhatsApp">WhatsApp</option>
@@ -902,6 +906,7 @@ export default function Assisted_Sales_Client({
                         <select
                           value={selectedProductId}
                           onChange={(e) => handleProductSelectChange(e.target.value)}
+                          aria-label="Selecionar produto do catálogo"
                           className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-cyan-500 cursor-pointer"
                         >
                           {products.map((p) => (
@@ -922,6 +927,7 @@ export default function Assisted_Sales_Client({
                             setCatalogError(null)
                             setCatalogQuantity(parseInt(e.target.value) || 0)
                           }}
+                          aria-label="Quantidade do produto"
                           className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-cyan-500 text-center"
                         />
                       </div>
@@ -937,6 +943,7 @@ export default function Assisted_Sales_Client({
                             setCatalogError(null)
                             setCatalogPrice(parseFloat(e.target.value) || 0)
                           }}
+                          aria-label="Preço unitário do produto"
                           className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-cyan-500 text-right font-mono"
                         />
                       </div>
@@ -963,6 +970,7 @@ export default function Assisted_Sales_Client({
                             setCustomTitle(e.target.value)
                           }}
                           placeholder="Ex: Suporte Fone Personalizado"
+                          aria-label="Descrição da peça personalizada"
                           className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-cyan-500"
                         />
                       </div>
@@ -977,6 +985,7 @@ export default function Assisted_Sales_Client({
                             setCustomError(null)
                             setCustomQuantity(parseInt(e.target.value) || 0)
                           }}
+                          aria-label="Quantidade da peça personalizada"
                           className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-cyan-500 text-center"
                         />
                       </div>
@@ -992,6 +1001,7 @@ export default function Assisted_Sales_Client({
                             setCustomError(null)
                             setCustomPrice(parseFloat(e.target.value) || 0)
                           }}
+                          aria-label="Preço da peça personalizada"
                           className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-cyan-500 text-right font-mono"
                         />
                       </div>
@@ -1057,6 +1067,7 @@ export default function Assisted_Sales_Client({
                     value={adminNotes}
                     onChange={(e) => setAdminNotes(e.target.value)}
                     placeholder="Ex: Peça em filamento preto fosco. Entrega presencial no balcão."
+                    aria-label="Observações internas da venda"
                     className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-cyan-500"
                   />
                 </div>

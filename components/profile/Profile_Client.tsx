@@ -154,6 +154,7 @@ export default function Profile_Client({ user, addresses }: ProfileClientProps) 
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
                   onChange={handleAvatarChange}
+                  aria-label="Escolher foto de perfil"
                   className="hidden"
                 />
                 <p className="text-[11px] text-slate-500">JPG, PNG ou WebP até 5 MB.</p>
@@ -170,6 +171,7 @@ export default function Profile_Client({ user, addresses }: ProfileClientProps) 
                   type="text"
                   required
                   defaultValue={user.username}
+                  aria-label="Nome de usuário para exibição"
                   className="w-full px-3.5 py-2.5 rounded-lg bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:border-cyan-400"
                 />
               </div>
@@ -183,6 +185,7 @@ export default function Profile_Client({ user, addresses }: ProfileClientProps) 
                   type="text"
                   required
                   defaultValue={user.name ?? ''}
+                  aria-label="Nome completo"
                   className="w-full px-3.5 py-2.5 rounded-lg bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:border-cyan-400"
                 />
               </div>
@@ -195,6 +198,7 @@ export default function Profile_Client({ user, addresses }: ProfileClientProps) 
                   type="email"
                   disabled
                   value={user.email}
+                  aria-label="E-mail da conta"
                   className="w-full px-3.5 py-2.5 rounded-lg bg-slate-950/50 border border-slate-800/60 text-sm text-slate-500 cursor-not-allowed"
                 />
               </div>
@@ -207,6 +211,7 @@ export default function Profile_Client({ user, addresses }: ProfileClientProps) 
                   name="birthDate"
                   type="date"
                   defaultValue={user.birthDate ?? ''}
+                  aria-label="Data de nascimento"
                   className="w-full px-3.5 py-2.5 rounded-lg bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:border-cyan-400"
                 />
               </div>
@@ -220,6 +225,7 @@ export default function Profile_Client({ user, addresses }: ProfileClientProps) 
                   type="text"
                   placeholder="(15) 99999-9999"
                   defaultValue={user.phone ?? ''}
+                  aria-label="Telefone ou WhatsApp"
                   className="w-full px-3.5 py-2.5 rounded-lg bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:border-cyan-400"
                 />
               </div>
@@ -233,6 +239,7 @@ export default function Profile_Client({ user, addresses }: ProfileClientProps) 
                   type="text"
                   placeholder="000.000.000-00"
                   defaultValue={user.cpf ?? ''}
+                  aria-label="CPF para emissão e envio"
                   className="w-full px-3.5 py-2.5 rounded-lg bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:border-cyan-400"
                 />
               </div>
@@ -310,9 +317,9 @@ export default function Profile_Client({ user, addresses }: ProfileClientProps) 
 
           {/* Novo Endereço */}
           <form action={addressAction} className="space-y-3 pt-4 border-t border-slate-800">
-            <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+            <h2 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
               Adicionar Endereço
-            </h3>
+            </h2>
 
             {addressState.error && (
               <p className="text-xs text-rose-400">{addressState.error}</p>
@@ -323,6 +330,7 @@ export default function Profile_Client({ user, addresses }: ProfileClientProps) 
               type="text"
               required
               placeholder="CEP (00000-000)"
+              aria-label="CEP (00000-000)"
               className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-xs text-white"
             />
             <div className="grid grid-cols-3 gap-2">
@@ -331,6 +339,7 @@ export default function Profile_Client({ user, addresses }: ProfileClientProps) 
                 type="text"
                 required
                 placeholder="Rua / Avenida"
+                aria-label="Rua ou Avenida"
                 className="col-span-2 px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-xs text-white"
               />
               <input
@@ -338,6 +347,7 @@ export default function Profile_Client({ user, addresses }: ProfileClientProps) 
                 type="text"
                 required
                 placeholder="Nº"
+                aria-label="Número residencial"
                 className="px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-xs text-white"
               />
             </div>
@@ -345,6 +355,7 @@ export default function Profile_Client({ user, addresses }: ProfileClientProps) 
               name="complement"
               type="text"
               placeholder="Complemento (opcional)"
+              aria-label="Complemento do endereço"
               className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-xs text-white"
             />
             <input
@@ -352,6 +363,7 @@ export default function Profile_Client({ user, addresses }: ProfileClientProps) 
               type="text"
               required
               placeholder="Bairro"
+              aria-label="Bairro"
               className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-xs text-white"
             />
             <div className="grid grid-cols-3 gap-2">
@@ -360,6 +372,7 @@ export default function Profile_Client({ user, addresses }: ProfileClientProps) 
                 type="text"
                 required
                 placeholder="Cidade"
+                aria-label="Cidade"
                 className="col-span-2 px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-xs text-white"
               />
               <input
@@ -368,12 +381,13 @@ export default function Profile_Client({ user, addresses }: ProfileClientProps) 
                 required
                 maxLength={2}
                 placeholder="UF"
+                aria-label="Estado (UF)"
                 className="px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-xs text-white uppercase"
               />
             </div>
 
             <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
-              <input name="isDefault" type="checkbox" className="accent-cyan-500" />
+              <input name="isDefault" type="checkbox" aria-label="Definir como endereço principal" className="accent-cyan-500" />
               Definir como endereço principal
             </label>
 

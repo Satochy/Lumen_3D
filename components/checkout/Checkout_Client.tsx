@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import Link from 'next/link'
 import {
   ShieldCheck,
@@ -114,13 +115,15 @@ export default function Checkout_Client({
               </Link>
             </div>
           ) : (
-            <MercadoPagoBrick
-              preferenceId={preferenceId}
-              orderId={order.id}
-              amount={order.totalAmount}
-              payerEmail={payerEmail}
-              payerName={payerName}
-            />
+            <div className="min-h-[380px]">
+              <MercadoPagoBrick
+                preferenceId={preferenceId}
+                orderId={order.id}
+                amount={order.totalAmount}
+                payerEmail={payerEmail}
+                payerName={payerName}
+              />
+            </div>
           )}
         </div>
 
@@ -167,12 +170,14 @@ export default function Checkout_Client({
                 className="py-3 flex items-center justify-between gap-3 text-xs"
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-12 h-12 rounded-xl bg-slate-950 border border-slate-800 overflow-hidden shrink-0">
+                  <div className="relative w-12 h-12 rounded-xl bg-slate-950 border border-slate-800 overflow-hidden shrink-0">
                     {item.image ? (
-                      <img
+                      <Image
                         src={item.image}
                         alt={item.productTitle}
-                        className="w-full h-full object-cover"
+                        fill
+                        sizes="48px"
+                        className="object-cover"
                       />
                     ) : null}
                   </div>

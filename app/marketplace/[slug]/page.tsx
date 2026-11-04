@@ -1,3 +1,4 @@
+import Image from 'next/image'
 import { Header, Footer } from '@/components/layout'
 import { prisma } from '@/lib/prisma'
 import Cart_Button from '@/components/cart/Cart_Button'
@@ -15,21 +16,22 @@ interface ProductDetailPageProps {
 
 export default async function ProductDetailPage({ params }: ProductDetailPageProps) {
   const { slug } = await params
-  const user = await getCurrentUser()
 
-  let product: PublicProduct | null = null
-  try {
-    // Busca estrita e direta pelo campo único @unique slug conforme o schema
-    const row = await prisma.product.findUnique({
-      where: { slug },
-    })
-    // Produto arquivado se comporta como inexistente para o público
-    if (row && !row.archivedAt) {
-      product = serializeProduct(row)
-    }
-  } catch (error) {
-    console.error('Erro ao buscar produto:', error)
-  }
+  const [user, row] = await Promise.all([
+    getCurrentUser(),
+    prisma.product
+      .findUnique({
+        where: { slug },
+      })
+      .catch((error) => {
+        console.error('Erro ao buscar produto:', error)
+        return null
+      }),
+  ])
+
+  // Produto arquivado se comporta como inexistente para o público
+  const product: PublicProduct | null =
+    row && !row.archivedAt ? serializeProduct(row) : null
 
   if (!product) {
     notFound()
@@ -50,10 +52,13 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
           {/* Galeria / Imagem do Produto */}
           <div className="bg-slate-900/50 border border-slate-800/80 rounded-2xl p-4 flex items-center justify-center min-h-[400px] lg:min-h-[500px] overflow-hidden relative">
             {product.images && product.images.length > 0 ? (
-              <img
+              <Image
                 src={mainImage}
                 alt={product.title}
-                className="w-full h-full object-cover rounded-xl"
+                fill
+                priority
+                sizes="(max-width: 1024px) 100vw, 600px"
+                className="object-cover rounded-xl"
               />
             ) : (
               <div className="text-center text-slate-600 flex flex-col items-center">

@@ -27,35 +27,32 @@ const logisticsLabels: Record<LogisticsStatus, { label: string; style: string }>
   CANCELLED: { label: 'Cancelado', style: 'bg-rose-500/10 text-rose-400 border-rose-500/20' },
 }
 
-export default async function UserOrdersPage() {
-  const user = await getCurrentUser()
+export default async function UserOrdersPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ status?: string; orderId?: string }>
+}) {
+  const [user, resolvedSearchParams] = await Promise.all([
+    getCurrentUser(),
+    searchParams ? searchParams : Promise.resolve(undefined),
+  ])
+
   if (!user) {
     redirect('/login')
   }
 
-  let orders = await prisma.order.findMany({
+  // Se o usuário acabou de ser redirecionado após pagamento de um pedido específico, sincroniza apenas esse pedido
+  if (resolvedSearchParams?.orderId && resolvedSearchParams?.status === 'success') {
+    await syncOrderWithMercadoPago(resolvedSearchParams.orderId)
+  }
+
+  const orders = await prisma.order.findMany({
     where: { userId: user.id },
     include: {
       items: true,
     },
     orderBy: { createdAt: 'desc' },
   })
-
-  const pendingOrders = orders.filter((o) => o.paymentStatus === 'PENDING')
-  if (pendingOrders.length > 0) {
-    const syncResults = await Promise.all(
-      pendingOrders.map((o) => syncOrderWithMercadoPago(o.id))
-    )
-    if (syncResults.some((r) => r.isPaid)) {
-      orders = await prisma.order.findMany({
-        where: { userId: user.id },
-        include: {
-          items: true,
-        },
-        orderBy: { createdAt: 'desc' },
-      })
-    }
-  }
 
   return (
     <div className="min-h-screen bg-[#050811] text-slate-100 flex flex-col font-sans">

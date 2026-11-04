@@ -402,6 +402,7 @@ export default function Production_Queue_Client({
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Buscar por peça, pedido ou cliente..."
+            aria-label="Buscar por peça, pedido ou cliente"
             className="w-full pl-9 pr-3 py-2 bg-slate-950/80 border border-slate-800 rounded-xl text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-cyan-500"
           />
         </div>
@@ -416,11 +417,11 @@ export default function Production_Queue_Client({
               <CheckCircle2 className="w-6 h-6" />
             </div>
             <div className="space-y-1">
-              <h3 className="text-sm font-semibold text-slate-200">
+              <h2 className="text-sm font-semibold text-slate-200">
                 {activeTab === 'concluidos'
                   ? 'Nenhuma peça no histórico de concluídos ainda.'
                   : 'Tudo em dia na oficina!'}
-              </h3>
+              </h2>
               <p className="text-xs text-slate-400 max-w-sm mx-auto">
                 {activeTab === 'concluidos'
                   ? 'As peças finalizadas nas etapas anteriores serão arquivadas permanentemente aqui.'

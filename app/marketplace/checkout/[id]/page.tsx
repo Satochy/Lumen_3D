@@ -14,10 +14,15 @@ import { prisma } from '@/lib/prisma'
 
 export default async function CheckoutOrderPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>
+  searchParams?: Promise<{ status?: string; payment_id?: string }>
 }) {
-  const { id } = await params
+  const [{ id }, resolvedSearchParams] = await Promise.all([
+    params,
+    searchParams ? searchParams : Promise.resolve(undefined),
+  ])
   const user = await getCurrentUser()
   const cookieStore = await cookies()
   const isUnlocked = cookieStore.get(`unlocked_order_${id}`)?.value === 'true'
@@ -162,8 +167,14 @@ export default async function CheckoutOrderPage({
   }
 
   let effectivePaymentStatus = order.paymentStatus
-  if (effectivePaymentStatus === 'PENDING') {
-    const syncRes = await syncOrderWithMercadoPago(order.id)
+  const hasReturnedFromGateway = Boolean(
+    resolvedSearchParams?.status === 'success' || resolvedSearchParams?.payment_id
+  )
+
+  // Sincroniza com a API do Mercado Pago apenas se o comprador retornou de redirect com status/payment_id.
+  // Evita chamadas remotas de busca síncronas bloqueando o SSR nos acessos regulares.
+  if (effectivePaymentStatus === 'PENDING' && hasReturnedFromGateway) {
+    const syncRes = await syncOrderWithMercadoPago(order.id, resolvedSearchParams?.payment_id)
     if (syncRes.isPaid) {
       effectivePaymentStatus = 'PAID'
     }

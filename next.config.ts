@@ -7,15 +7,24 @@ const supabaseHost = process.env.NEXT_PUBLIC_SUPABASE_URL
 
 const nextConfig: NextConfig = {
   images: {
-    remotePatterns: supabaseHost
-      ? [
-          {
-            protocol: "https",
-            hostname: supabaseHost,
-            pathname: "/storage/v1/object/public/**",
-          },
-        ]
-      : [],
+    formats: ["image/avif", "image/webp"],
+    remotePatterns: [
+      ...(supabaseHost
+        ? [
+            {
+              protocol: "https" as const,
+              hostname: supabaseHost,
+              pathname: "/storage/v1/object/public/**",
+            },
+          ]
+        : []),
+      {
+        protocol: "https",
+        hostname: "*.supabase.co",
+        pathname: "/storage/v1/object/public/**",
+      },
+    ],
+    minimumCacheTTL: 2592000,
   },
   experimental: {
     // 6 fotos x 5 MB + campos do formulário (o padrão é 1 MB)

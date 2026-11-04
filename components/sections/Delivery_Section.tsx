@@ -1,5 +1,3 @@
-'use client';
-
 import RegionMap from './Region_Map';
 import { Truck, CheckCircle2, Compass, MapPin } from 'lucide-react';
 import { siteConfig, whatsappDeliveryMessage } from '@/lib/config';

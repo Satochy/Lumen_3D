@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Trash2, ArrowRight, Loader2, AlertCircle } from 'lucide-react'
@@ -91,12 +92,14 @@ export default function Cart_Page_Client() {
               className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
             >
               <div className="flex items-center gap-4">
-                <div className="w-16 h-16 rounded-xl bg-slate-950 border border-slate-800 overflow-hidden shrink-0">
+                <div className="relative w-16 h-16 rounded-xl bg-slate-950 border border-slate-800 overflow-hidden shrink-0">
                   {item.image ? (
-                    <img
+                    <Image
                       src={item.image}
                       alt={item.title}
-                      className="w-full h-full object-cover"
+                      fill
+                      sizes="64px"
+                      className="object-cover"
                     />
                   ) : null}
                 </div>
@@ -116,6 +119,7 @@ export default function Cart_Page_Client() {
                     onClick={() =>
                       updateQuantity(item.productId, item.variantId, item.quantity - 1)
                     }
+                    aria-label="Diminuir quantidade"
                     className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-white transition font-bold cursor-pointer disabled:opacity-40"
                   >
                     -
@@ -129,6 +133,7 @@ export default function Cart_Page_Client() {
                     onClick={() =>
                       updateQuantity(item.productId, item.variantId, item.quantity + 1)
                     }
+                    aria-label="Aumentar quantidade"
                     className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-white transition font-bold cursor-pointer disabled:opacity-40"
                   >
                     +

@@ -125,6 +125,27 @@ export async function createAssistedSaleDraftAction(payload: unknown): Promise<{
       productionStatus: 'QUEUED'
     }> = []
 
+    // Otimização de Performance: Busca todos os produtos do catálogo em lote (elimina consulta N+1 no loop)
+    const referencedProductIds = items
+      .map((i) => i.productId)
+      .filter((id): id is string => Boolean(id))
+
+    const productsFromDb =
+      referencedProductIds.length > 0
+        ? await prisma.product.findMany({
+            where: { id: { in: referencedProductIds } },
+            select: {
+              id: true,
+              title: true,
+              price: true,
+              isMadeToOrder: true,
+              productionDays: true,
+            },
+          })
+        : []
+
+    const productMap = new Map(productsFromDb.map((p) => [p.id, p]))
+
     for (const item of items) {
       const quantity = item.quantity
       let finalPrice = item.priceUnit ?? item.unitPrice ?? 0
@@ -133,9 +154,7 @@ export async function createAssistedSaleDraftAction(payload: unknown): Promise<{
       let productionDays: number | null = item.productionDays || 3
 
       if (item.productId) {
-        const product = await prisma.product.findUnique({
-          where: { id: item.productId },
-        })
+        const product = productMap.get(item.productId)
 
         if (!product) {
           return { success: false, error: `Produto do catálogo não encontrado (ID: ${item.productId}).` }

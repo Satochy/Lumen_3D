@@ -1,3 +1,4 @@
+import { cache } from 'react'
 import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
 import { redirect } from 'next/navigation'
@@ -12,7 +13,20 @@ export interface User {
   emailConfirmedAt?: string | null
 }
 
-export async function getCurrentUser(): Promise<User | null> {
+const userSelectFields = {
+  id: true,
+  username: true,
+  name: true,
+  email: true,
+  role: true,
+  avatarUrl: true,
+} as const
+
+/**
+ * Retorna o usuário autenticado na sessão atual com memoização por request (React cache).
+ * Evita múltiplas requisições HTTP redundantes para a API do Supabase e queries repetidas no banco.
+ */
+export const getCurrentUser = cache(async (): Promise<User | null> => {
   const supabase = await createClient()
   const {
     data: { user: supabaseUser },
@@ -25,11 +39,13 @@ export async function getCurrentUser(): Promise<User | null> {
 
   let dbUser = await prisma.user.findUnique({
     where: { id: supabaseUser.id },
+    select: userSelectFields,
   })
 
   if (!dbUser && supabaseUser.email) {
     dbUser = await prisma.user.findUnique({
       where: { email: supabaseUser.email },
+      select: userSelectFields,
     })
   }
 
@@ -46,7 +62,7 @@ export async function getCurrentUser(): Promise<User | null> {
     avatarUrl: dbUser.avatarUrl ?? null,
     emailConfirmedAt: supabaseUser.email_confirmed_at ?? null,
   }
-}
+})
 
 export async function requireAdmin(): Promise<User> {
   const user = await getCurrentUser()

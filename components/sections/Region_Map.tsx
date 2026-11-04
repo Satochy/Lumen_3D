@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 
 type CityMarker = {
   id: string;
@@ -88,10 +89,13 @@ export default function Region_Map({ className = '' }: RegionMapProps) {
 
       {/* Proporção 1000:892 mantida dinamicamente */}
       <div className="relative w-full aspect-[1000/892]">
-        <img
+        <Image
           src="/region-map.jpg"
           alt="Mapa da Região"
-          className="absolute inset-0 w-full h-full object-cover select-none pointer-events-none"
+          fill
+          sizes="(max-width: 768px) 100vw, 700px"
+          loading="lazy"
+          className="object-cover select-none pointer-events-none"
         />
 
         <div className="absolute inset-0 bg-gradient-to-t from-[#050811]/70 via-transparent to-[#050811]/30 pointer-events-none" />

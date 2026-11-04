@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import Image from 'next/image'
 import { Box, ChevronRight } from 'lucide-react'
 import { AddToCartButton } from '@/components/cart/Add_To_Cart_Button'
 import { formatCurrency } from '@/lib/format_currency'
@@ -59,7 +60,13 @@ export default function Catalog_Section({ products }: CatalogSectionProps) {
                     {/* Imagem do Produto ou Placeholder */}
                     <div className="w-full h-48 bg-[#050811] rounded-xl border border-cyan-950 flex flex-col items-center justify-center text-cyan-500/40 group-hover:text-cyan-400 transition-colors duration-300 overflow-hidden relative">
                       {mainImage ? (
-                        <img src={mainImage} alt={product.title} className="w-full h-full object-cover group-hover:scale-105 transition duration-300" />
+                        <Image
+                          src={mainImage}
+                          alt={product.title}
+                          fill
+                          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                          className="object-cover group-hover:scale-105 transition duration-300"
+                        />
                       ) : (
                         <>
                           <Box className="w-10 h-10 stroke-[1.5]" />

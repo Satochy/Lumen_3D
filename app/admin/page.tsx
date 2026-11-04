@@ -253,7 +253,7 @@ export default async function AdminDashboardPage() {
           <div className="flex items-center justify-between border-b border-slate-800/80 pb-3.5">
             <div className="flex items-center gap-2.5">
               <Boxes className="w-4 h-4 text-cyan-400" />
-              <h3 className="text-sm font-bold text-slate-100">Catálogo ({totalProducts} produtos)</h3>
+              <h2 className="text-sm font-bold text-slate-100">Catálogo ({totalProducts} produtos)</h2>
             </div>
             <Link
               href="/admin/products"
@@ -307,7 +307,7 @@ export default async function AdminDashboardPage() {
           <div className="flex items-center justify-between border-b border-slate-800/80 pb-3.5">
             <div className="flex items-center gap-2.5">
               <CircleDot className="w-4 h-4 text-amber-400" />
-              <h3 className="text-sm font-bold text-slate-100">Carretéis de Filamento</h3>
+              <h2 className="text-sm font-bold text-slate-100">Carretéis de Filamento</h2>
             </div>
             <Link
               href="/admin/filaments"
@@ -353,7 +353,7 @@ export default async function AdminDashboardPage() {
           <div>
             <div className="flex items-center gap-2 border-b border-slate-800/80 pb-3.5 mb-4">
               <Sparkles className="w-4 h-4 text-cyan-400" />
-              <h3 className="text-sm font-bold text-slate-100">Atalhos Operacionais</h3>
+              <h2 className="text-sm font-bold text-slate-100">Atalhos Operacionais</h2>
             </div>
 
             <div className="space-y-2.5">
@@ -404,10 +404,10 @@ export default async function AdminDashboardPage() {
       <div className="bg-[#080d1e]/80 border border-slate-800/80 rounded-2xl p-6 space-y-4 shadow-lg shadow-black/40 backdrop-blur-md">
         <div className="flex items-center justify-between border-b border-slate-800/80 pb-4">
           <div>
-            <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
+            <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
               <ShoppingBag className="w-4 h-4 text-cyan-400" />
               <span>Vendas Recentes</span>
-            </h3>
+            </h2>
             <p className="text-xs text-slate-400 mt-0.5">Últimos pedidos registrados no sistema</p>
           </div>
           <Link

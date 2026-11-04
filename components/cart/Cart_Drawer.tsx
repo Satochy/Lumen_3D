@@ -208,6 +208,7 @@ export default function Cart_Drawer({ isOpen, onClose }: CartDrawerProps) {
               </h2>
               <button
                 onClick={onClose}
+                aria-label="Fechar opções de entrega"
                 className="w-10 h-10 flex items-center justify-center rounded-lg text-slate-400 hover:text-white text-sm font-bold transition"
               >
                 ✕
@@ -226,6 +227,7 @@ export default function Cart_Drawer({ isOpen, onClose }: CartDrawerProps) {
                     onChange={(e) => handleCepChange(e.target.value)}
                     placeholder="00000-000"
                     maxLength={9}
+                    aria-label="CEP para cálculo de frete"
                     className="flex-1 px-4 py-3 bg-slate-950 border border-slate-800 rounded-lg text-sm text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-400 transition"
                     disabled={shippingLoading}
                   />
@@ -304,6 +306,7 @@ export default function Cart_Drawer({ isOpen, onClose }: CartDrawerProps) {
               </h2>
               <button
                 onClick={onClose}
+                aria-label="Fechar carrinho"
                 className="w-10 h-10 flex items-center justify-center rounded-lg text-slate-400 hover:text-white text-sm font-bold transition cursor-pointer"
               >
                 ✕

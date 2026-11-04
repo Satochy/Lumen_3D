@@ -35,7 +35,7 @@ export default async function EditProductPage({ params }: EditProductPageProps) 
         >
           ← Voltar para produtos
         </Link>
-        <h1 className="text-2xl font-bold text-slate-100 mt-2">Editar produto</h1>
+        <h2 className="text-2xl font-bold text-slate-100 mt-2">Editar produto</h2>
         <p className="text-xs text-slate-400">{product.title}</p>
       </div>
 

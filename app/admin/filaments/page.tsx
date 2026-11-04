@@ -48,8 +48,9 @@ export default async function FilamentsPage() {
         <form action={createFilament} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
             <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1">Material (ex: PLA, PETG)</label>
+              <label htmlFor="filament-material" className="block text-xs font-medium text-slate-400 mb-1">Material (ex: PLA, PETG)</label>
               <input
+                id="filament-material"
                 type="text"
                 name="material"
                 required
@@ -58,8 +59,9 @@ export default async function FilamentsPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1">Nome da Cor</label>
+              <label htmlFor="filament-color" className="block text-xs font-medium text-slate-400 mb-1">Nome da Cor</label>
               <input
+                id="filament-color"
                 type="text"
                 name="color"
                 required
@@ -68,8 +70,9 @@ export default async function FilamentsPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1">Código HEX da Cor</label>
+              <label htmlFor="filament-hex" className="block text-xs font-medium text-slate-400 mb-1">Código HEX da Cor</label>
               <input
+                id="filament-hex"
                 type="text"
                 name="hexColor"
                 placeholder="#111111"
@@ -77,8 +80,9 @@ export default async function FilamentsPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1">Peso Atual (gramas)</label>
+              <label htmlFor="filament-remaining" className="block text-xs font-medium text-slate-400 mb-1">Peso Atual (gramas)</label>
               <input
+                id="filament-remaining"
                 type="number"
                 name="remainingGrams"
                 defaultValue="1000"
@@ -86,8 +90,9 @@ export default async function FilamentsPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1">Alerta Mínimo (gramas)</label>
+              <label htmlFor="filament-threshold" className="block text-xs font-medium text-slate-400 mb-1">Alerta Mínimo (gramas)</label>
               <input
+                id="filament-threshold"
                 type="number"
                 name="minThresholdGrams"
                 defaultValue="200"

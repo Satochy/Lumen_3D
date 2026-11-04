@@ -451,6 +451,7 @@ export default function Orders_Manager_Client({
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Buscar por ID, cliente ou peça..."
+            aria-label="Buscar pedidos por ID, cliente ou peça"
             className="w-full pl-9 pr-3 py-2 bg-slate-950/80 border border-slate-800 rounded-xl text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-cyan-500"
           />
         </div>
@@ -788,6 +789,7 @@ export default function Orders_Manager_Client({
                                         }))
                                       }
                                       placeholder="Código de Rastreio (Melhor Envio)"
+                                      aria-label={`Código de rastreio para o pedido #${order.id.slice(-6).toUpperCase()}`}
                                       className="flex-1 px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-cyan-500 font-mono"
                                     />
                                     <button
@@ -828,6 +830,7 @@ export default function Orders_Manager_Client({
                                         }))
                                       }
                                       placeholder="Anotações internas sobre esta venda..."
+                                      aria-label={`Notas internas sobre a venda #${order.id.slice(-6).toUpperCase()}`}
                                       rows={3}
                                       className="w-full px-2.5 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-amber-500 resize-none"
                                     />

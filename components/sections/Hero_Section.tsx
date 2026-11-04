@@ -66,6 +66,7 @@ export default function Hero_Section() {
                   alt="Mascote Lúmen 3D" 
                   width={320} 
                   height={320} 
+                  sizes="(max-width: 640px) 280px, 320px"
                   className="w-full h-auto object-contain drop-shadow-[0_10px_35px_rgba(0,216,255,0.2)] hover:scale-105 transition duration-500"
                   priority
                 />

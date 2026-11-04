@@ -5,25 +5,47 @@ import Product_Card from '@/components/marketplace/Product_Card'
 import { activeProducts, serializeProduct, type PublicProduct } from '@/lib/product_helpers'
 import { getCurrentUser } from '@/lib/auth'
 
-export default async function MarketplacePage() {
-  const user = await getCurrentUser()
+export const revalidate = 60
 
-  let products: PublicProduct[] = []
-  try {
-    const rows = await prisma.product.findMany({
-      where: activeProducts,
-      orderBy: { createdAt: 'desc' },
-    })
-    products = rows.map(serializeProduct)
-  } catch (error) {
-    console.warn('Erro ao carregar produtos:', error)
-  }
+export default async function MarketplacePage() {
+  const [user, rows] = await Promise.all([
+    getCurrentUser(),
+    prisma.product
+      .findMany({
+        where: activeProducts,
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          title: true,
+          slug: true,
+          description: true,
+          price: true,
+          stock: true,
+          reservedStock: true,
+          isMadeToOrder: true,
+          productionDays: true,
+          images: true,
+          category: true,
+          dimensions: true,
+          weightGrams: true,
+          isFeatured: true,
+          archivedAt: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      })
+      .catch((error) => {
+        console.warn('Erro ao carregar produtos do catálogo:', error)
+        return []
+      }),
+  ])
+
+  const products: PublicProduct[] = rows.map(serializeProduct)
 
   return (
     <div className="min-h-screen bg-[#050811] text-slate-100 flex flex-col font-sans">
       <Header user={user} logoHref="/" actions={<Cart_Button />}>
-        <nav className="hidden md:flex items-center gap-6 text-xs font-semibold text-slate-300">
-        </nav>
+        <nav className="hidden md:flex items-center gap-6 text-xs font-semibold text-slate-300"></nav>
       </Header>
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-12 space-y-8">
@@ -46,8 +68,12 @@ export default async function MarketplacePage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {products.map((product) => (
-              <Product_Card key={product.id} product={product} />
+            {products.map((product, index) => (
+              <Product_Card
+                key={product.id}
+                product={product}
+                priority={index < 4}
+              />
             ))}
           </div>
         )}

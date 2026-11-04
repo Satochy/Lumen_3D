@@ -21,7 +21,12 @@ interface ProductProps {
   dimensions?: string | null
 }
 
-export default function Product_Card({ product }: { product: ProductProps }) {
+interface ProductCardProps {
+  product: ProductProps
+  priority?: boolean
+}
+
+export default function Product_Card({ product, priority = false }: ProductCardProps) {
   const router = useRouter()
   const { addItem } = useCart()
 
@@ -46,6 +51,8 @@ export default function Product_Card({ product }: { product: ProductProps }) {
           src={mainImage}
           alt={product.title}
           fill
+          priority={priority}
+          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 25vw"
           className="object-cover group-hover:scale-105 transition duration-300"
         />
         <span
@@ -71,9 +78,9 @@ export default function Product_Card({ product }: { product: ProductProps }) {
           <span className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider">
             {product.category}
           </span>
-          <h3 className="text-sm font-bold text-white mt-1 line-clamp-1">
+          <h2 className="text-sm font-bold text-white mt-1 line-clamp-1">
             {product.title}
-          </h3>
+          </h2>
           {isMadeToOrder && (
             <p className="text-[11px] text-amber-300/90 mt-1">
               {product.productionDays && product.productionDays > 0

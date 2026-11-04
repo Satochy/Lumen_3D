@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { useState, useRef, useEffect } from 'react'
 import { LogOut, User as UserIcon, Settings, Package } from 'lucide-react'
 import { signOut } from '@/app/actions/auth_actions'
@@ -54,14 +55,18 @@ export default function User_Actions({ user }: { user?: UserType | null }) {
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
+        aria-label="Menu do usuário"
+        aria-expanded={isOpen}
         className="flex items-center gap-2.5 p-1 pr-3.5 bg-slate-900/80 border border-slate-800 hover:border-cyan-500/40 rounded-full transition group cursor-pointer"
       >
-        <div className="w-8 h-8 rounded-full bg-slate-800 overflow-hidden flex items-center justify-center border border-slate-700 shrink-0">
+        <div className="relative w-8 h-8 rounded-full bg-slate-800 overflow-hidden flex items-center justify-center border border-slate-700 shrink-0">
           {user.avatarUrl ? (
-            <img
+            <Image
               src={user.avatarUrl}
               alt={displayUsername}
-              className="object-cover w-full h-full"
+              fill
+              sizes="32px"
+              className="object-cover"
             />
           ) : (
             <UserIcon className="w-4 h-4 text-cyan-400 group-hover:text-cyan-300 transition" />
@@ -75,12 +80,14 @@ export default function User_Actions({ user }: { user?: UserType | null }) {
       {isOpen && (
         <div className="absolute right-0 mt-2 w-56 bg-[#0a0e1a] border border-cyan-950 rounded-xl shadow-xl py-2 z-50">
           <div className="px-4 py-2.5 border-b border-slate-800/80 mb-1 flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-slate-800 overflow-hidden flex items-center justify-center border border-slate-700 shrink-0">
+            <div className="relative w-9 h-9 rounded-full bg-slate-800 overflow-hidden flex items-center justify-center border border-slate-700 shrink-0">
               {user.avatarUrl ? (
-                <img
+                <Image
                   src={user.avatarUrl}
                   alt={displayUsername}
-                  className="object-cover w-full h-full"
+                  fill
+                  sizes="36px"
+                  className="object-cover"
                 />
               ) : (
                 <UserIcon className="w-4 h-4 text-cyan-400" />

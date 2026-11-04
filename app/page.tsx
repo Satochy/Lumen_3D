@@ -6,30 +6,50 @@ import {
   Delivery_Section,
   Feedbacks_Section,
   About_Section,
-  Especial_Order_Section
+  Especial_Order_Section,
 } from '@/components/sections'
-
 import { prisma } from '@/lib/prisma'
 import { activeProducts, serializeProduct, type PublicProduct } from '@/lib/product_helpers'
 
-export const revalidate = 0
+// Revalidação em segundo plano a cada 60s com invalidação instantânea sob demanda via revalidatePath('/')
+export const revalidate = 60
 
 export default async function Landing_Page() {
-  const user = await getCurrentUser()
+  const [user, rawProducts] = await Promise.all([
+    getCurrentUser(),
+    prisma.product
+      .findMany({
+        where: activeProducts,
+        take: 6,
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          title: true,
+          slug: true,
+          description: true,
+          price: true,
+          stock: true,
+          reservedStock: true,
+          isMadeToOrder: true,
+          productionDays: true,
+          images: true,
+          category: true,
+          dimensions: true,
+          weightGrams: true,
+          isFeatured: true,
+          archivedAt: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      })
+      .catch((error) => {
+        console.warn('Tabela de produtos vazia ou banco desconectado:', error)
+        return []
+      }),
+  ])
 
-  let products: PublicProduct[] = []
-  try {
-    const rawProducts = await prisma.product.findMany({
-      where: activeProducts,
-      take: 6,
-      orderBy: { createdAt: 'desc' },
-    })
-
-    // Converte o Decimal do Prisma para number usando serializeProduct
-    products = rawProducts.map(serializeProduct)
-  } catch (error) {
-    console.warn('Tabela de produtos vazia ou banco desconectado:', error)
-  }
+  // Converte o Decimal do Prisma para number usando serializeProduct
+  const products: PublicProduct[] = rawProducts.map(serializeProduct)
 
   return (
     <div className="page-root min-h-screen bg-[#050811] text-slate-100 flex flex-col font-sans selection:bg-cyan-500 selection:text-slate-950">

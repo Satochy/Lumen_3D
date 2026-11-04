@@ -66,8 +66,9 @@ export default function Product_Form({ action, submitLabel, defaults }: ProductF
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label className={labelCls}>Título do Produto</label>
+          <label htmlFor="prod-title" className={labelCls}>Título do Produto</label>
           <input
+            id="prod-title"
             name="title"
             required
             defaultValue={defaults?.title}
@@ -76,17 +77,17 @@ export default function Product_Form({ action, submitLabel, defaults }: ProductF
           />
         </div>
         <div>
-          <label className={labelCls}>Slug (URL Amigável)</label>
+          <label htmlFor="prod-slug" className={labelCls}>Slug (URL Amigável)</label>
           {isEdit ? (
             <>
-              <input value={defaults.slug} disabled readOnly className={`${inputCls} opacity-60`} />
+              <input id="prod-slug" value={defaults.slug} disabled readOnly className={`${inputCls} opacity-60`} />
               <p className="text-[10px] text-slate-500 mt-1">
                 O slug não muda ao editar, para não quebrar links já compartilhados.
               </p>
             </>
           ) : (
             <>
-              <input name="slug" placeholder="Deixe vazio para gerar pelo título" className={inputCls} />
+              <input id="prod-slug" name="slug" placeholder="Deixe vazio para gerar pelo título" className={inputCls} />
               <p className="text-[10px] text-slate-500 mt-1">
                 Letras minúsculas, números e hífens. Acentos são removidos automaticamente.
               </p>
@@ -97,8 +98,9 @@ export default function Product_Form({ action, submitLabel, defaults }: ProductF
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div>
-          <label className={labelCls}>Preço (R$)</label>
+          <label htmlFor="prod-price" className={labelCls}>Preço (R$)</label>
           <input
+            id="prod-price"
             name="price"
             type="number"
             step="0.01"
@@ -110,8 +112,9 @@ export default function Product_Form({ action, submitLabel, defaults }: ProductF
           />
         </div>
         <div>
-          <label className={labelCls}>{isEdit ? 'Estoque' : 'Estoque Inicial'}</label>
+          <label htmlFor="prod-stock" className={labelCls}>{isEdit ? 'Estoque' : 'Estoque Inicial'}</label>
           <input
+            id="prod-stock"
             name="stock"
             type="number"
             min="0"
@@ -122,8 +125,9 @@ export default function Product_Form({ action, submitLabel, defaults }: ProductF
           />
         </div>
         <div>
-          <label className={labelCls}>Peso (Gramas)</label>
+          <label htmlFor="prod-weight" className={labelCls}>Peso (Gramas)</label>
           <input
+            id="prod-weight"
             name="weightGrams"
             type="number"
             min="0"
@@ -136,8 +140,9 @@ export default function Product_Form({ action, submitLabel, defaults }: ProductF
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label className={labelCls}>Descrição</label>
+          <label htmlFor="prod-desc" className={labelCls}>Descrição</label>
           <input
+            id="prod-desc"
             name="description"
             defaultValue={defaults?.description}
             placeholder="Descrição resumida do produto"
@@ -145,8 +150,9 @@ export default function Product_Form({ action, submitLabel, defaults }: ProductF
           />
         </div>
         <div>
-          <label className={labelCls}>Categoria</label>
+          <label htmlFor="prod-category" className={labelCls}>Categoria</label>
           <input
+            id="prod-category"
             name="category"
             defaultValue={defaults?.category}
             placeholder="Ex: Decoração, Action Figure"
@@ -156,8 +162,9 @@ export default function Product_Form({ action, submitLabel, defaults }: ProductF
       </div>
 
       <div>
-        <label className={labelCls}>Dimensões (Ex: 10x10x20 cm)</label>
+        <label htmlFor="prod-dimensions" className={labelCls}>Dimensões (Ex: 10x10x20 cm)</label>
         <input
+          id="prod-dimensions"
           name="dimensions"
           defaultValue={defaults?.dimensions ?? ''}
           placeholder="10x10x20 cm"
@@ -186,10 +193,11 @@ export default function Product_Form({ action, submitLabel, defaults }: ProductF
         </div>
 
         <div>
-          <label className={labelCls}>
+          <label htmlFor="prod-days" className={labelCls}>
             Prazo de Produção Estimado (Dias úteis){isMadeToOrderChecked ? ' *' : ''}
           </label>
           <input
+            id="prod-days"
             name="productionDays"
             type="number"
             min="1"
@@ -249,6 +257,7 @@ export default function Product_Form({ action, submitLabel, defaults }: ProductF
           multiple
           accept="image/jpeg,image/png,image/webp"
           onChange={handlePick}
+          aria-label="Upload de fotos do produto"
           className="block w-full text-xs text-slate-300 file:mr-3 file:rounded-lg file:border-0 file:bg-cyan-500 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-slate-950 hover:file:bg-cyan-400"
         />
         <p className="text-[10px] text-slate-500">

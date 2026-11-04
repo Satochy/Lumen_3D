@@ -216,7 +216,7 @@ export default function MercadoPagoBrick({
         </div>
       )}
 
-      <div className="rounded-xl overflow-hidden border border-slate-800/80 bg-slate-950/60 p-2 sm:p-4">
+      <div className="rounded-xl overflow-hidden border border-slate-800/80 bg-slate-950/60 p-2 sm:p-4 min-h-[380px]">
         <Payment
           initialization={{
             amount,

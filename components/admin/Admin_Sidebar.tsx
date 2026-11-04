@@ -84,6 +84,7 @@ export default function Admin_Sidebar({ adminUser, counts }: AdminSidebarProps) 
 
   return (
     <aside
+      aria-label="Navegação administrativa"
       className={`${
         isCollapsed ? 'w-20' : 'w-64'
       } border-r border-slate-800/80 bg-[#060a17]/95 backdrop-blur-xl flex flex-col justify-between shrink-0 min-h-screen sticky top-0 shadow-2xl shadow-black/60 transition-all duration-300 ease-in-out`}
@@ -125,6 +126,7 @@ export default function Admin_Sidebar({ adminUser, counts }: AdminSidebarProps) 
             className="p-2 rounded-lg text-slate-400 hover:text-cyan-300 hover:bg-slate-800/80 border border-transparent hover:border-slate-700 transition-colors"
             title={isCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral (modo compacto)'}
             aria-label={isCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'}
+            aria-expanded={!isCollapsed}
           >
             {isCollapsed ? (
               <PanelLeftOpen className="w-4 h-4 text-cyan-400" />
@@ -141,6 +143,7 @@ export default function Admin_Sidebar({ adminUser, counts }: AdminSidebarProps) 
               href="/admin/orders?tab=ocorrencias"
               className="mb-4 flex items-center justify-center w-10 h-10 mx-auto rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-300 hover:border-rose-400 transition relative"
               title={`${counts.occurrences} Ocorrência(s) pendente(s) requerem atenção`}
+              aria-label={`${counts.occurrences} ${counts.occurrences === 1 ? 'ocorrência pendente' : 'ocorrências pendentes'}`}
             >
               <AlertTriangle className="w-4 h-4 text-rose-400 animate-pulse" />
               <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-rose-500 ring-2 ring-[#060a17]" />
@@ -184,6 +187,8 @@ export default function Admin_Sidebar({ adminUser, counts }: AdminSidebarProps) 
                   key={item.href}
                   href={item.href}
                   title={item.label}
+                  aria-label={item.label}
+                  aria-current={isActive ? 'page' : undefined}
                   className={`relative flex items-center justify-center w-11 h-11 mx-auto rounded-xl transition-all duration-200 group ${
                     isActive
                       ? 'bg-cyan-500/20 text-cyan-200 border border-cyan-500/40 shadow-lg shadow-cyan-950/50'
@@ -206,6 +211,7 @@ export default function Admin_Sidebar({ adminUser, counts }: AdminSidebarProps) 
               <Link
                 key={item.href}
                 href={item.href}
+                aria-current={isActive ? 'page' : undefined}
                 className={`relative flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all duration-200 group ${
                   isActive
                     ? 'bg-gradient-to-r from-cyan-500/15 via-cyan-500/8 to-transparent text-cyan-200 border border-cyan-500/30 shadow-md shadow-cyan-950/25 before:absolute before:left-0 before:top-2 before:bottom-2 before:w-1 before:rounded-r before:bg-cyan-400 before:shadow-[0_0_10px_#22d3ee]'
