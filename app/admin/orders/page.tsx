@@ -27,6 +27,8 @@ export default async function AdminOrdersPage({
     totalAmount: Number(o.totalAmount),
     shippingCost: Number(o.shippingCost),
     trackingCode: o.trackingCode,
+    shippingLabelUrl: o.shippingLabelUrl ?? null,
+    externalShipmentId: o.externalShipmentId ?? null,
     isLocalDelivery: o.isLocalDelivery,
     isAssistedSale: o.isAssistedSale,
     adminNotes: o.adminNotes,

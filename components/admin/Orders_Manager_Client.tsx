@@ -15,6 +15,8 @@ import {
   ShoppingBag,
   CreditCard,
   Clock,
+  Printer,
+  ExternalLink,
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/format_currency'
 import type { PaymentStatus, LogisticsStatus } from '@prisma/client'
@@ -24,6 +26,10 @@ import {
   updateOrderAdminNotesAction,
   resolveOrderOccurrenceAction,
 } from '@/app/actions/orders'
+import {
+  confirmLocalDeliveryAction,
+  generateMelhorEnvioLabelAction,
+} from '@/app/actions/shipping_actions'
 
 export interface SerializedAdminOrderItem {
   id: string
@@ -82,6 +88,8 @@ export interface SerializedAdminOrder {
   totalAmount: number
   shippingCost: number
   trackingCode: string | null
+  shippingLabelUrl?: string | null
+  externalShipmentId?: string | null
   isLocalDelivery: boolean
   isAssistedSale: boolean
   adminNotes: string | null
@@ -296,6 +304,50 @@ export default function Orders_Manager_Client({
     })
   }
 
+  // Ação de confirmar saída física para Entrega Local (Frota Própria)
+  const handleConfirmLocalDelivery = (orderId: string) => {
+    startTransition(async () => {
+      const res = await confirmLocalDeliveryAction(orderId)
+      if (res.success) {
+        setOrders((prev) =>
+          prev.map((o) =>
+            o.id === orderId
+              ? {
+                  ...o,
+                  logisticsStatus: 'SHIPPED',
+                  shippedAt: new Date().toISOString(),
+                }
+              : o
+          )
+        )
+      } else {
+        alert(res.error || 'Erro ao confirmar entrega local.')
+      }
+    })
+  }
+
+  // Ação de emitir etiqueta no Melhor Envio
+  const handleGenerateMelhorEnvioLabel = (orderId: string) => {
+    startTransition(async () => {
+      const res = await generateMelhorEnvioLabelAction(orderId)
+      if (res.success) {
+        setOrders((prev) =>
+          prev.map((o) =>
+            o.id === orderId
+              ? {
+                  ...o,
+                  shippingLabelUrl: res.shippingLabelUrl || o.shippingLabelUrl,
+                  externalShipmentId: res.externalShipmentId || o.externalShipmentId,
+                }
+              : o
+          )
+        )
+      } else {
+        alert(res.error || 'Erro ao emitir etiqueta no Melhor Envio.')
+      }
+    })
+  }
+
   // Ação de resolver ocorrência
   const handleResolveOccurrence = (orderId: string, occurrenceId: string) => {
     startTransition(async () => {
@@ -491,6 +543,12 @@ export default function Orders_Manager_Client({
                   const isExpanded = expandedOrders[order.id] ?? false
                   const hasMadeToOrder = order.items.some((i) => i.isMadeToOrder)
                   const totalItems = order.items.reduce((acc, i) => acc + i.quantity, 0)
+                  const isLocalShipping = Boolean(
+                    order.isLocalDelivery ||
+                    order.shippingAddressSnapshot?.isLocalDelivery ||
+                    (typeof order.shippingAddressSnapshot?.serviceName === 'string' &&
+                      order.shippingAddressSnapshot.serviceName.toLowerCase().includes('local'))
+                  )
 
                   return (
                     <React.Fragment key={order.id}>
@@ -595,6 +653,41 @@ export default function Orders_Manager_Client({
                         {/* 8. Ação: Dropdown de status logístico global & Expansor */}
                         <td className="py-3.5 px-4 text-right">
                           <div className="flex items-center justify-end gap-2">
+                            {order.logisticsStatus === 'READY_FOR_SHIPPING' && (
+                              isLocalShipping ? (
+                                <button
+                                  onClick={() => handleConfirmLocalDelivery(order.id)}
+                                  disabled={isPending}
+                                  className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition shadow-sm disabled:opacity-50"
+                                  title="Confirmar Saída (Frota Própria)"
+                                >
+                                  <Truck className="w-3 h-3" />
+                                  <span>Saída Própria</span>
+                                </button>
+                              ) : order.shippingLabelUrl ? (
+                                <a
+                                  href={order.shippingLabelUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold bg-cyan-700 hover:bg-cyan-600 text-white rounded-lg transition shadow-sm"
+                                  title="Imprimir Etiqueta"
+                                >
+                                  <Printer className="w-3 h-3" />
+                                  <span>Etiqueta</span>
+                                </a>
+                              ) : (
+                                <button
+                                  onClick={() => handleGenerateMelhorEnvioLabel(order.id)}
+                                  disabled={isPending}
+                                  className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition shadow-sm disabled:opacity-50"
+                                  title="Emitir Etiqueta Melhor Envio"
+                                >
+                                  <Package className="w-3 h-3" />
+                                  <span>Emitir</span>
+                                </button>
+                              )
+                            )}
+
                             {/* Dropdown de status logístico global */}
                             <select
                               value={order.logisticsStatus}
@@ -775,6 +868,50 @@ export default function Orders_Manager_Client({
                                     <p className="text-slate-500 text-xs">
                                       Endereço não informado ou snapshot indisponível.
                                     </p>
+                                  )}
+
+                                  {/* Ações de Expedição (Fase 1) */}
+                                  {order.logisticsStatus === 'READY_FOR_SHIPPING' && (
+                                    <div className="pt-2.5 border-t border-slate-800 flex flex-wrap items-center gap-2">
+                                      {isLocalShipping ? (
+                                        <button
+                                          onClick={() => handleConfirmLocalDelivery(order.id)}
+                                          disabled={isPending}
+                                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white rounded-lg transition flex items-center gap-1.5 shadow-md shadow-emerald-950/40 disabled:opacity-50"
+                                        >
+                                          <Truck className="w-3.5 h-3.5" />
+                                          <span>Confirmar Saída (Frota Própria)</span>
+                                        </button>
+                                      ) : (
+                                        <button
+                                          onClick={() => handleGenerateMelhorEnvioLabel(order.id)}
+                                          disabled={isPending}
+                                          className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-xs font-semibold text-white rounded-lg transition flex items-center gap-1.5 shadow-md shadow-blue-950/40 disabled:opacity-50"
+                                        >
+                                          <Package className="w-3.5 h-3.5" />
+                                          <span>Emitir Etiqueta Melhor Envio</span>
+                                        </button>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {/* Botão de Impressão de Etiqueta (se emitida) */}
+                                  {order.shippingLabelUrl && (
+                                    <div className="pt-2 border-t border-slate-800 flex items-center gap-2">
+                                      <a
+                                        href={order.shippingLabelUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="px-3 py-1.5 bg-cyan-700 hover:bg-cyan-600 text-xs font-semibold text-white rounded-lg transition inline-flex items-center gap-1.5 shadow-md shadow-cyan-950/40"
+                                      >
+                                        <Printer className="w-3.5 h-3.5" />
+                                        <span>Imprimir Etiqueta</span>
+                                        <ExternalLink className="w-3 h-3 text-cyan-200" />
+                                      </a>
+                                      <span className="text-[10px] text-slate-400 font-mono">
+                                        (Etiqueta gerada e pronta)
+                                      </span>
+                                    </div>
                                   )}
 
                                   {/* Código de Rastreio */}

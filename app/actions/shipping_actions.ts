@@ -1,5 +1,8 @@
 'use server'
 
+import { revalidatePath } from 'next/cache'
+import { requireAdmin } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
 import { sanitizeCEP, isValidCEP, isLocalShippingRegion } from '@/lib/shipping/shipping_utils'
 
 /** CEP de origem da loja (remessa). Vem do ambiente, nunca do cliente. */
@@ -341,4 +344,350 @@ function getServiceIcon(serviceId: string): string {
   if (name.includes('jadlog')) return '🚚'
   if (name.includes('azul') || name.includes('latam')) return '✈️'
   return '📦'
+}
+
+export interface GenerateLabelResponse {
+  success: boolean
+  error?: string
+  shippingLabelUrl?: string
+  externalShipmentId?: string
+}
+
+/**
+ * Confirma a saída física de pedido com Entrega Local (frota própria).
+ * Isento de emissão de etiqueta no Melhor Envio.
+ * Atualiza logisticsStatus para SHIPPED e registra o admin responsável.
+ */
+export async function confirmLocalDeliveryAction(
+  orderId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const admin = await requireAdmin()
+
+    if (!orderId || typeof orderId !== 'string') {
+      return { success: false, error: 'ID do pedido inválido.' }
+    }
+
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: {
+        id: true,
+        paymentStatus: true,
+        logisticsStatus: true,
+        isLocalDelivery: true,
+        adminNotes: true,
+        shippingAddressSnapshot: true,
+      },
+    })
+
+    if (!order) {
+      return { success: false, error: 'Pedido não encontrado.' }
+    }
+
+    const snapshot = order.shippingAddressSnapshot as Record<string, unknown> | null
+    const isLocal = Boolean(
+      order.isLocalDelivery ||
+      snapshot?.isLocalDelivery ||
+      (typeof snapshot?.serviceName === 'string' &&
+        snapshot.serviceName.toLowerCase().includes('local'))
+    )
+
+    if (!isLocal) {
+      return {
+        success: false,
+        error: 'Este pedido não é de Entrega Local e exige emissão de etiqueta para envio.',
+      }
+    }
+
+    if (order.logisticsStatus !== 'READY_FOR_SHIPPING') {
+      return {
+        success: false,
+        error: `O pedido deve estar com status "Pronto para Envio" (status atual: ${order.logisticsStatus}).`,
+      }
+    }
+
+    const dispatchNote = `[Saída por Frota Própria confirmada por ${admin.name || admin.username} em ${new Date().toLocaleString('pt-BR')}]`
+    const updatedNotes = order.adminNotes
+      ? `${order.adminNotes}\n${dispatchNote}`
+      : dispatchNote
+
+    await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        logisticsStatus: 'SHIPPED',
+        shippedAt: new Date(),
+        adminNotes: updatedNotes,
+      },
+    })
+
+    revalidatePath('/admin/orders')
+    revalidatePath('/admin')
+    revalidatePath('/profile/orders')
+
+    return { success: true }
+  } catch (err: unknown) {
+    console.error('Erro ao confirmar entrega local:', err)
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Falha ao despachar entrega local.',
+    }
+  }
+}
+
+/**
+ * Gera etiqueta de envio do Melhor Envio para pedidos prontos para envio.
+ * Fase 1: Monta o payload JSON exigido pela API do Melhor Envio com fallback de dimensões (15x15x15 cm, 0.3 kg).
+ * Chamada fetch comentada/mockada simulando a gravação de shippingLabelUrl e externalShipmentId.
+ */
+export async function generateMelhorEnvioLabelAction(
+  orderId: string
+): Promise<GenerateLabelResponse> {
+  try {
+    const admin = await requireAdmin()
+
+    if (!orderId || typeof orderId !== 'string') {
+      return { success: false, error: 'ID do pedido inválido.' }
+    }
+
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            cpf: true,
+          },
+        },
+        items: {
+          include: {
+            product: {
+              select: {
+                id: true,
+                title: true,
+                dimensions: true,
+                weightGrams: true,
+              },
+            },
+          },
+        },
+      },
+    })
+
+    if (!order) {
+      return { success: false, error: 'Pedido não encontrado.' }
+    }
+
+    // 1. Validação de elegibilidade (Regras de Negócio)
+    if (order.paymentStatus !== 'PAID') {
+      return {
+        success: false,
+        error: 'Etiquetas só podem ser emitidas para pedidos com pagamento confirmado (PAID).',
+      }
+    }
+
+    if (order.logisticsStatus !== 'READY_FOR_SHIPPING') {
+      return {
+        success: false,
+        error: `O pedido deve estar com status "Pronto para Envio" (status atual: ${order.logisticsStatus}).`,
+      }
+    }
+
+    const snapshot = order.shippingAddressSnapshot as Record<string, unknown> | null
+    const isLocal = Boolean(
+      order.isLocalDelivery ||
+      snapshot?.isLocalDelivery ||
+      (typeof snapshot?.serviceName === 'string' &&
+        snapshot.serviceName.toLowerCase().includes('local'))
+    )
+
+    if (isLocal) {
+      return {
+        success: false,
+        error: 'Pedidos de Entrega Local são isentos de etiquetas do Melhor Envio.',
+      }
+    }
+
+    if (!snapshot || !snapshot.zipCode) {
+      return {
+        success: false,
+        error: 'Endereço de entrega ou CEP não localizado no snapshot do pedido.',
+      }
+    }
+
+    // 2. Extrai serviço selecionado (ex: "me-1" -> 1, "me-2" -> 2)
+    const rawServiceId = String(snapshot.serviceId || '1')
+    const serviceIdNum = parseInt(rawServiceId.replace(/\D/g, ''), 10) || 1
+
+    // 3. Monta remetente (Lúmen 3D)
+    const fromData = {
+      name: process.env.STORE_NAME || 'Lúmen 3D',
+      phone: process.env.STORE_PHONE || '15981159636',
+      email: process.env.STORE_EMAIL || 'lumenimpressao3d@gmail.com',
+      document: process.env.STORE_DOCUMENT || '00000000000',
+      address: process.env.STORE_STREET || 'Rua Principal',
+      complement: process.env.STORE_COMPLEMENT || '',
+      number: process.env.STORE_NUMBER || '100',
+      district: process.env.STORE_NEIGHBORHOOD || 'Centro',
+      city: process.env.STORE_CITY || 'Itapetininga',
+      state_abbr: process.env.STORE_STATE || 'SP',
+      country_id: 'BR',
+      postal_code: sanitizeCEP(STORE_CEP || '18200000'),
+    }
+
+    // 4. Monta destinatário
+    const toData = {
+      name: order.user?.name || 'Cliente Lúmen 3D',
+      phone: order.user?.phone || '15999999999',
+      email: order.user?.email || '',
+      document: order.user?.cpf || '00000000000',
+      address: String(snapshot.street || ''),
+      complement: snapshot.complement ? String(snapshot.complement) : '',
+      number: String(snapshot.number || 'S/N'),
+      district: String(snapshot.neighborhood || ''),
+      city: String(snapshot.city || ''),
+      state_abbr: String(snapshot.state || 'SP'),
+      country_id: 'BR',
+      postal_code: sanitizeCEP(String(snapshot.zipCode || '')),
+    }
+
+    // 5. Itens e volumes com fallback global obrigatório: 15x15x15 cm, 0.3 kg
+    const productsPayload = order.items.map((item, index) => {
+      const dims = item.product?.dimensions
+        ? getVolumeFromDimensions(item.product.dimensions)
+        : { width: 15, height: 15, length: 15 }
+
+      const rawWeight = item.product?.weightGrams
+        ? item.product.weightGrams / 1000
+        : 0.3
+
+      const unitWeightKg = Math.max(Number(rawWeight.toFixed(3)), 0.001)
+
+      return {
+        id: `item-${index + 1}`,
+        name: item.productTitle,
+        quantity: item.quantity,
+        unitary_value: Number(item.priceUnit),
+        weight: unitWeightKg,
+        width: dims.width || 15,
+        height: dims.height || 15,
+        length: dims.length || 15,
+      }
+    })
+
+    const totalInsuranceValue = Number(order.totalAmount)
+
+    // Payload base de inserção no carrinho do Melhor Envio (POST /api/v2/me/cart)
+    const melhorEnvioCartPayload = {
+      service: serviceIdNum,
+      from: fromData,
+      to: toData,
+      products: productsPayload.map((p) => ({
+        name: p.name,
+        quantity: p.quantity,
+        unitary_value: p.unitary_value,
+      })),
+      volumes: productsPayload.map((p) => ({
+        height: p.height,
+        width: p.width,
+        length: p.length,
+        weight: p.weight,
+      })),
+      options: {
+        insurance_value: totalInsuranceValue,
+        receipt: false,
+        own_hand: false,
+        reverse: false,
+        non_commercial: true,
+      },
+    }
+
+    // Log seguro do payload estruturado
+    console.log(
+      `[Melhor Envio] Payload de emissão montado para pedido #${order.id.slice(0, 8)}:`,
+      JSON.stringify({
+        service: serviceIdNum,
+        destinationZip: toData.postal_code,
+        volumesCount: productsPayload.length,
+        totalInsurance: totalInsuranceValue,
+      })
+    )
+
+    /*
+     * Chamada à API real do Melhor Envio (Fase 2 - Homologação Live):
+     *
+     * const token = process.env.MELHOR_ENVIO_TOKEN
+     * const apiUrl = process.env.MELHOR_ENVIO_API_URL || 'https://sandbox.melhorenvio.com.br'
+     *
+     * // 1. POST /api/v2/me/cart
+     * const cartRes = await fetch(`${apiUrl}/api/v2/me/cart`, {
+     *   method: 'POST',
+     *   headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+     *   body: JSON.stringify(melhorEnvioCartPayload),
+     * })
+     * const cartData = await cartRes.json()
+     * const shipmentId = cartData.id
+     *
+     * // 2. POST /api/v2/me/shipment/checkout
+     * await fetch(`${apiUrl}/api/v2/me/shipment/checkout`, {
+     *   method: 'POST',
+     *   headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+     *   body: JSON.stringify({ orders: [shipmentId] }),
+     * })
+     *
+     * // 3. POST /api/v2/me/shipment/generate
+     * await fetch(`${apiUrl}/api/v2/me/shipment/generate`, {
+     *   method: 'POST',
+     *   headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+     *   body: JSON.stringify({ orders: [shipmentId] }),
+     * })
+     *
+     * // 4. POST /api/v2/me/shipment/print
+     * const printRes = await fetch(`${apiUrl}/api/v2/me/shipment/print`, {
+     *   method: 'POST',
+     *   headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+     *   body: JSON.stringify({ mode: 'public', orders: [shipmentId] }),
+     * })
+     * const printData = await printRes.json()
+     * const labelUrl = printData.url
+     */
+
+    // Simulação controlada de emissão (Fase 1)
+    const mockShipmentId = `me-ord-${order.id.slice(0, 8)}-${Date.now()}`
+    const mockLabelUrl = `https://sandbox.melhorenvio.com.br/shipment/print/${mockShipmentId}.pdf`
+    const mockTrackingCode = `BR${Date.now().toString().slice(-9)}LM`
+
+    const labelNote = `[Etiqueta Melhor Envio gerada por ${admin.name || admin.username} em ${new Date().toLocaleString('pt-BR')}]`
+    const updatedAdminNotes = order.adminNotes
+      ? `${order.adminNotes}\n${labelNote}`
+      : labelNote
+
+    await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        shippingLabelUrl: mockLabelUrl,
+        externalShipmentId: mockShipmentId,
+        trackingCode: order.trackingCode || mockTrackingCode,
+        adminNotes: updatedAdminNotes,
+      },
+    })
+
+    revalidatePath('/admin/orders')
+    revalidatePath('/admin')
+    revalidatePath('/profile/orders')
+
+    return {
+      success: true,
+      shippingLabelUrl: mockLabelUrl,
+      externalShipmentId: mockShipmentId,
+    }
+  } catch (err: unknown) {
+    console.error('Erro ao gerar etiqueta no Melhor Envio:', err)
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Falha ao emitir etiqueta no Melhor Envio.',
+    }
+  }
 }
