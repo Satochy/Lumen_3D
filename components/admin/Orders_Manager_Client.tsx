@@ -6,7 +6,6 @@ import {
   Truck,
   CheckCircle2,
   AlertTriangle,
-  Search,
   MapPin,
   FileText,
   ChevronDown,
@@ -17,6 +16,7 @@ import {
   Clock,
   Printer,
   ExternalLink,
+  XCircle,
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/format_currency'
 import type { PaymentStatus, LogisticsStatus } from '@prisma/client'
@@ -30,6 +30,8 @@ import {
   confirmLocalDeliveryAction,
   generateMelhorEnvioLabelAction,
 } from '@/app/actions/shipping_actions'
+import { cancelOrderAdminAction } from '@/app/actions/order_cancellation_actions'
+import { AdminMetricsAndFilterBar } from '@/components/admin/Admin_Metrics_And_Filter_Bar'
 
 export interface SerializedAdminOrderItem {
   id: string
@@ -205,6 +207,17 @@ export default function Orders_Manager_Client({
   const [expandedOrders, setExpandedOrders] = useState<Record<string, boolean>>({})
   const [trackingInputs, setTrackingInputs] = useState<Record<string, string>>({})
   const [notesInputs, setNotesInputs] = useState<Record<string, string>>({})
+  const [toastMessage, setToastMessage] = useState<{
+    type: 'success' | 'error'
+    text: string
+  } | null>(null)
+
+  const showToast = (type: 'success' | 'error', text: string) => {
+    setToastMessage({ type, text })
+    setTimeout(() => {
+      setToastMessage((prev) => (prev?.text === text ? null : prev))
+    }, 4500)
+  }
 
   // Contadores para as tabs de Vendas
   const paidOrders = orders.filter((o) => o.paymentStatus === 'PAID')
@@ -372,153 +385,180 @@ export default function Orders_Manager_Client({
     })
   }
 
+  // Ação de cancelamento administrativo com reposição de estoque
+  const handleCancelOrder = (orderId: string) => {
+    const shortId = orderId.slice(-6).toUpperCase()
+    const reason = window.prompt(
+      `Informe o motivo do cancelamento do pedido #${shortId}:`
+    )
+    if (reason === null) return
+
+    const trimmedReason = reason.trim()
+    if (!trimmedReason) {
+      showToast('error', 'É obrigatório informar o motivo do cancelamento.')
+      return
+    }
+
+    startTransition(async () => {
+      const res = await cancelOrderAdminAction(orderId, trimmedReason)
+      if (res.success) {
+        setOrders((prev) =>
+          prev.map((o) =>
+            o.id === orderId
+              ? {
+                  ...o,
+                  logisticsStatus: 'CANCELLED',
+                  cancelledAt: res.cancelledAt || new Date().toISOString(),
+                  adminNotes: res.adminNotes ?? o.adminNotes,
+                }
+              : o
+          )
+        )
+        setNotesInputs((prev) => ({
+          ...prev,
+          [orderId]: res.adminNotes ?? prev[orderId] ?? '',
+        }))
+        showToast(
+          'success',
+          `Pedido #${shortId} cancelado com sucesso e estoque atualizado.`
+        )
+      } else {
+        showToast('error', res.error || 'Falha ao cancelar o pedido.')
+      }
+    })
+  }
+
   return (
-    <div className="space-y-6">
-      {/* Barra de Tabs Operacionais de Vendas & Busca */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-3">
-        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-          <button
-            onClick={() => setActiveTab('todos')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-2 ${
-              activeTab === 'todos'
-                ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
-            }`}
-          >
-            <ShoppingBag className="w-3.5 h-3.5" />
-            <span>Todos</span>
-            <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-slate-800 text-slate-300 font-bold">
-              {orders.length}
-            </span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('pagos')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-2 ${
-              activeTab === 'pagos'
-                ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/40'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
-            }`}
-          >
-            <CreditCard className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Pagos</span>
-            {paidOrders.length > 0 && (
-              <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-emerald-500/20 text-emerald-300 font-bold">
-                {paidOrders.length}
-              </span>
-            )}
-          </button>
-
-          <button
-            onClick={() => setActiveTab('pendentes')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-2 ${
-              activeTab === 'pendentes'
-                ? 'bg-amber-500/15 text-amber-300 border border-amber-500/40'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
-            }`}
-          >
-            <Clock className="w-3.5 h-3.5 text-amber-400" />
-            <span>Aguardando</span>
-            {pendingOrders.length > 0 && (
-              <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-amber-500/20 text-amber-300 font-bold">
-                {pendingOrders.length}
-              </span>
-            )}
-          </button>
-
-          <button
-            onClick={() => setActiveTab('envio')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-2 ${
-              activeTab === 'envio'
-                ? 'bg-teal-500/15 text-teal-300 border border-teal-500/40'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
-            }`}
-          >
-            <CheckCircle2 className="w-3.5 h-3.5 text-teal-400" />
-            <span>Prontos p/ Envio</span>
-            {readyOrders.length > 0 && (
-              <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-teal-500/20 text-teal-300 font-bold">
-                {readyOrders.length}
-              </span>
-            )}
-          </button>
-
-          <button
-            onClick={() => setActiveTab('transito')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-2 ${
-              activeTab === 'transito'
-                ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
-            }`}
-          >
-            <Truck className="w-3.5 h-3.5 text-cyan-400" />
-            <span>Em Transporte</span>
-            {shippedOrders.length > 0 && (
-              <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-cyan-500/20 text-cyan-300 font-bold">
-                {shippedOrders.length}
-              </span>
-            )}
-          </button>
-
-          <button
-            onClick={() => setActiveTab('entregues')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-2 ${
-              activeTab === 'entregues'
-                ? 'bg-slate-800 text-slate-200 border border-slate-700'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
-            }`}
-          >
-            <Package className="w-3.5 h-3.5 text-slate-400" />
-            <span>Entregues</span>
-            {deliveredOrders.length > 0 && (
-              <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-slate-800 text-slate-300 font-bold">
-                {deliveredOrders.length}
-              </span>
-            )}
-          </button>
-
-          <button
-            onClick={() => setActiveTab('ocorrencias')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-2 ${
-              activeTab === 'ocorrencias'
-                ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
-            }`}
-          >
-            <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
-            <span>Ocorrências</span>
-            {occurrenceOrders.length > 0 && (
-              <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-rose-500/30 text-rose-200 font-bold">
-                {occurrenceOrders.length}
-              </span>
-            )}
-          </button>
+    <div className="space-y-4 max-w-7xl mx-auto">
+      {/* Toast de feedback */}
+      {toastMessage && (
+        <div
+          role="status"
+          aria-live="polite"
+          className={`fixed bottom-5 right-5 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl border text-xs font-bold shadow-2xl transition ${
+            toastMessage.type === 'success'
+              ? 'bg-emerald-950/95 border-emerald-500/40 text-emerald-200'
+              : 'bg-rose-950/95 border-rose-500/40 text-rose-200'
+          }`}
+        >
+          {toastMessage.type === 'success' ? (
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          ) : (
+            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+          )}
+          <span>{toastMessage.text}</span>
         </div>
+      )}
 
-        {/* Campo de Busca Rápida */}
-        <div className="relative w-full sm:w-64">
-          <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Buscar por ID, cliente ou peça..."
-            aria-label="Buscar pedidos por ID, cliente ou peça"
-            className="w-full pl-9 pr-3 py-2 bg-slate-950/80 border border-slate-800 rounded-xl text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-cyan-500"
-          />
-        </div>
-      </div>
+      {/* MÉTRICAS E BARRA UNIFICADA DE BUSCA E FILTROS */}
+      <AdminMetricsAndFilterBar
+        metrics={[
+          {
+            id: 'total',
+            label: 'Total de Pedidos',
+            value: orders.length,
+            valueColorClass: 'text-slate-100',
+            icon: <ShoppingBag className="w-5 h-5 text-slate-500" />,
+          },
+          {
+            id: 'paid',
+            label: 'Pagos',
+            value: paidOrders.length,
+            valueColorClass: 'text-emerald-400',
+            icon: <CheckCircle2 className="w-5 h-5 text-emerald-400" />,
+          },
+          {
+            id: 'pending',
+            label: 'Aguardando',
+            value: pendingOrders.length,
+            valueColorClass: 'text-amber-400',
+            icon: <Clock className="w-5 h-5 text-amber-400" />,
+            showPulseDot: pendingOrders.length > 0,
+            dotColorClass: 'bg-amber-400',
+          },
+          {
+            id: 'occurrences',
+            label: 'Cancelados',
+            value: occurrenceOrders.length,
+            valueColorClass: 'text-rose-400',
+            icon: <AlertTriangle className="w-5 h-5 text-rose-400" />,
+          },
+        ]}
+        searchQuery={searchTerm}
+        onSearchChange={setSearchTerm}
+        searchPlaceholder="Buscar por ID, cliente ou peça..."
+        activeFilter={activeTab}
+        onFilterChange={setActiveTab}
+        filters={[
+          {
+            id: 'todos',
+            label: 'Todos',
+            count: orders.length,
+            icon: <ShoppingBag className="w-3.5 h-3.5 text-cyan-400" />,
+            activeColorClass:
+              'bg-cyan-950/50 border-cyan-500/40 text-cyan-300 shadow-sm',
+          },
+          {
+            id: 'pagos',
+            label: 'Pagos',
+            count: paidOrders.length,
+            icon: <CreditCard className="w-3.5 h-3.5 text-emerald-400" />,
+            activeColorClass:
+              'bg-emerald-950/50 border-emerald-500/40 text-emerald-300 shadow-sm',
+          },
+          {
+            id: 'pendentes',
+            label: 'Aguardando',
+            count: pendingOrders.length,
+            icon: <Clock className="w-3.5 h-3.5 text-amber-400" />,
+            activeColorClass:
+              'bg-amber-950/50 border-amber-500/40 text-amber-300 shadow-sm',
+          },
+          {
+            id: 'envio',
+            label: 'Prontos p/ Envio',
+            count: readyOrders.length,
+            icon: <CheckCircle2 className="w-3.5 h-3.5 text-teal-400" />,
+            activeColorClass:
+              'bg-teal-950/50 border-teal-500/40 text-teal-300 shadow-sm',
+          },
+          {
+            id: 'transito',
+            label: 'Em Transporte',
+            count: shippedOrders.length,
+            icon: <Truck className="w-3.5 h-3.5 text-cyan-400" />,
+            activeColorClass:
+              'bg-cyan-950/50 border-cyan-500/40 text-cyan-300 shadow-sm',
+          },
+          {
+            id: 'entregues',
+            label: 'Entregues',
+            count: deliveredOrders.length,
+            icon: <Package className="w-3.5 h-3.5 text-slate-400" />,
+            activeColorClass:
+              'bg-slate-800/80 border-slate-600/50 text-slate-200 shadow-sm',
+          },
+          {
+            id: 'ocorrencias',
+            label: 'Cancelados',
+            count: occurrenceOrders.length,
+            icon: <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />,
+            activeColorClass:
+              'bg-rose-950/50 border-rose-500/40 text-rose-300 shadow-sm',
+          },
+        ]}
+      />
 
-      {/* Tabela de Vendas Moderna (Order List) */}
+      {/* TABELA DE GERENCIAMENTO (ORDER LIST) */}
       <div className="rounded-2xl border border-slate-800/80 bg-[#080d1e]/90 shadow-2xl overflow-hidden backdrop-blur-sm">
         {filteredOrders.length === 0 ? (
-          <div className="p-12 text-center text-slate-500">
-            <ShoppingBag className="w-10 h-10 text-slate-600 mx-auto mb-3" />
-            <p className="text-sm font-semibold text-slate-400">
+          <div className="p-10 text-center text-slate-400 space-y-2">
+            <ShoppingBag className="w-8 h-8 text-slate-400 mx-auto" />
+            <p className="text-xs font-semibold text-slate-300">
               Nenhum pedido encontrado nesta visualização.
             </p>
-            <p className="text-xs text-slate-500 mt-1">
-              Alterne a aba ou limpe o termo de busca.
+            <p className="text-[11px] text-slate-400">
+              Alterne os filtros ou limpe o termo de busca acima.
             </p>
           </div>
         ) : (
@@ -726,6 +766,21 @@ export default function Orders_Manager_Client({
                                 <ChevronDown className="w-3.5 h-3.5" />
                               )}
                             </button>
+
+                            {/* Botão discreto de Cancelar Pedido */}
+                            {order.logisticsStatus !== 'DELIVERED' &&
+                              order.logisticsStatus !== 'CANCELLED' && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleCancelOrder(order.id)}
+                                  disabled={isPending}
+                                  title={`Cancelar pedido #${order.id.slice(-6).toUpperCase()}`}
+                                  aria-label={`Cancelar pedido #${order.id.slice(-6).toUpperCase()}`}
+                                  className="p-1.5 rounded-lg bg-rose-950/40 hover:bg-rose-900/50 text-rose-400 hover:text-rose-200 border border-rose-900/50 transition disabled:opacity-50"
+                                >
+                                  <XCircle className="w-3.5 h-3.5" />
+                                </button>
+                              )}
                           </div>
                         </td>
                       </tr>
@@ -959,6 +1014,7 @@ export default function Orders_Manager_Client({
                                       <span>Notas Internas da Venda</span>
                                     </span>
                                     <textarea
+                                      key={order.adminNotes || 'empty-notes'}
                                       defaultValue={order.adminNotes || ''}
                                       onChange={(e) =>
                                         setNotesInputs((prev) => ({
@@ -972,7 +1028,21 @@ export default function Orders_Manager_Client({
                                       className="w-full px-2.5 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-amber-500 resize-none"
                                     />
                                   </div>
-                                  <div className="flex justify-end pt-1">
+                                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                                    <div>
+                                      {order.logisticsStatus !== 'DELIVERED' &&
+                                        order.logisticsStatus !== 'CANCELLED' && (
+                                          <button
+                                            type="button"
+                                            onClick={() => handleCancelOrder(order.id)}
+                                            disabled={isPending}
+                                            className="px-2.5 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[11px] font-semibold rounded-lg transition inline-flex items-center gap-1.5 disabled:opacity-50"
+                                          >
+                                            <XCircle className="w-3.5 h-3.5 text-rose-400" />
+                                            <span>Cancelar Pedido</span>
+                                          </button>
+                                        )}
+                                    </div>
                                     <button
                                       onClick={() => handleSaveNotes(order.id)}
                                       disabled={isPending}

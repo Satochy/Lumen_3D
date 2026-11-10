@@ -227,7 +227,9 @@ export async function updateProductAction(
   redirect('/admin/products')
 }
 
-export async function archiveProductAction(id: string) {
+export async function archiveProductAction(
+  id: string
+): Promise<{ success: boolean; error?: string }> {
   await requireAdmin()
 
   try {
@@ -236,12 +238,16 @@ export async function archiveProductAction(id: string) {
       data: { archivedAt: new Date() },
     })
     revalidateStore(product.slug)
+    return { success: true }
   } catch (error) {
     console.error('Erro ao arquivar produto:', id, error)
+    return { success: false, error: 'Não foi possível arquivar o produto.' }
   }
 }
 
-export async function restoreProductAction(id: string) {
+export async function restoreProductAction(
+  id: string
+): Promise<{ success: boolean; error?: string }> {
   await requireAdmin()
 
   try {
@@ -250,25 +256,136 @@ export async function restoreProductAction(id: string) {
       data: { archivedAt: null },
     })
     revalidateStore(product.slug)
+    return { success: true }
   } catch (error) {
     console.error('Erro ao restaurar produto:', id, error)
+    return { success: false, error: 'Não foi possível restaurar o produto.' }
   }
 }
 
-export async function deleteProductAction(id: string) {
+export async function deleteProductAction(
+  id: string
+): Promise<{ success: boolean; error?: string }> {
   await requireAdmin()
 
   const orderCount = await prisma.orderItem.count({ where: { productId: id } })
   if (orderCount > 0) {
-    console.warn('Exclusão negada: produto com pedidos. Arquive-o.', id)
-    return
+    return {
+      success: false,
+      error:
+        'Este produto possui histórico de vendas e não pode ser apagado definitivamente. Utilize a opção Arquivar.',
+    }
   }
 
   try {
-    const product = await prisma.product.delete({ where: { id } })
+    const product = await prisma.$transaction(async (tx) => {
+      await tx.stockReservation.deleteMany({ where: { productId: id } })
+      await tx.stockMovement.deleteMany({ where: { productId: id } })
+      return tx.product.delete({ where: { id } })
+    })
     await deleteProductImages(product.images)
     revalidateStore(product.slug)
+    return { success: true }
   } catch (error) {
     console.error('Erro -> excluir produto:', id, error)
+    return {
+      success: false,
+      error: 'Erro ao excluir o produto permanentemente. Tente novamente.',
+    }
+  }
+}
+
+export async function bulkArchiveProductsAction(
+  ids: string[]
+): Promise<{ success: boolean; count?: number; error?: string }> {
+  await requireAdmin()
+
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return { success: false, error: 'Nenhum produto selecionado para arquivar.' }
+  }
+
+  try {
+    const result = await prisma.product.updateMany({
+      where: { id: { in: ids } },
+      data: { archivedAt: new Date() },
+    })
+    revalidateStore()
+    return { success: true, count: result.count }
+  } catch (error) {
+    console.error('Erro ao arquivar produtos em lote:', error)
+    return {
+      success: false,
+      error: 'Falha ao arquivar os produtos selecionados.',
+    }
+  }
+}
+
+export async function bulkDeleteProductsAction(
+  ids: string[]
+): Promise<{ success: boolean; deletedCount?: number; blockedCount?: number; error?: string }> {
+  await requireAdmin()
+
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return { success: false, error: 'Nenhum produto selecionado para excluir.' }
+  }
+
+  try {
+    // Identifica quais produtos possuem pedidos vinculados (histórico financeiro protegido)
+    const productsWithOrders = await prisma.orderItem.findMany({
+      where: { productId: { in: ids } },
+      select: { productId: true },
+      distinct: ['productId'],
+    })
+
+    const blockedIds = new Set(
+      productsWithOrders
+        .map((item) => item.productId)
+        .filter((pid): pid is string => Boolean(pid))
+    )
+    const deletableIds = ids.filter((id) => !blockedIds.has(id))
+
+    if (deletableIds.length === 0) {
+      return {
+        success: false,
+        blockedCount: blockedIds.size,
+        error:
+          'Os produtos selecionados possuem histórico de vendas e não podem ser excluídos permanentemente. Utilize a opção Arquivar.',
+      }
+    }
+
+    const productsToDelete = await prisma.product.findMany({
+      where: { id: { in: deletableIds } },
+      select: { images: true },
+    })
+
+    const deletedResult = await prisma.$transaction(async (tx) => {
+      await tx.stockReservation.deleteMany({
+        where: { productId: { in: deletableIds } },
+      })
+      await tx.stockMovement.deleteMany({
+        where: { productId: { in: deletableIds } },
+      })
+      return tx.product.deleteMany({
+        where: { id: { in: deletableIds } },
+      })
+    })
+
+    const allImages = productsToDelete.flatMap((p) => p.images)
+    if (allImages.length > 0) {
+      await deleteProductImages(allImages)
+    }
+
+    revalidateStore()
+    return {
+      success: true,
+      deletedCount: deletedResult.count,
+      blockedCount: blockedIds.size,
+    }
+  } catch (error) {
+    console.error('Erro ao excluir produtos em lote:', error)
+    return {
+      success: false,
+      error: 'Falha ao excluir os produtos selecionados. Tente novamente.',
+    }
   }
 }

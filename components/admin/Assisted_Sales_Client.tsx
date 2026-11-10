@@ -15,21 +15,23 @@ import {
   Mail,
   Share2,
   AlertCircle,
-  Search,
   CheckCircle2,
   Clock,
   Send,
   UserCheck,
-  DollarSign,
   FileText,
   ShoppingBag,
   X,
+  Inbox,
+  CreditCard,
+  XCircle,
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/format_currency'
 import {
   type CatalogProductOption,
   createAssistedSaleDraftAction,
 } from '@/app/actions/assisted_sales_actions'
+import { AdminMetricsAndFilterBar } from '@/components/admin/Admin_Metrics_And_Filter_Bar'
 
 export interface SerializedAssistedOrderItem {
   id: string
@@ -97,7 +99,9 @@ export default function Assisted_Sales_Client({
 
   // Filtros da tabela
   const [searchQuery, setSearchQuery] = useState('')
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'PAID'>('ALL')
+  const [statusFilter, setStatusFilter] = useState<
+    'ALL' | 'PENDING' | 'PAID' | 'CANCELLED'
+  >('ALL')
   const [originFilter, setOriginFilter] = useState<'ALL' | OriginOption>('ALL')
 
   // Controle de cópia individual de links na tabela
@@ -140,18 +144,27 @@ export default function Assisted_Sales_Client({
   // Métricas compactas
   const metrics = useMemo(() => {
     const total = orders.length
-    const pending = orders.filter((o) => o.paymentStatus === 'PENDING').length
+    const pending = orders.filter(
+      (o) => o.paymentStatus === 'PENDING' && o.logisticsStatus !== 'CANCELLED'
+    ).length
     const paidOrders = orders.filter((o) => o.paymentStatus === 'PAID')
     const paidCount = paidOrders.length
+    const cancelledCount = orders.filter((o) => o.logisticsStatus === 'CANCELLED').length
     const revenue = paidOrders.reduce((sum, o) => sum + o.totalAmount, 0)
 
-    return { total, pending, paidCount, revenue }
+    return { total, pending, paidCount, cancelledCount, revenue }
   }, [orders])
 
   // Filtragem dos pedidos na Tabela
   const filteredOrders = useMemo(() => {
     return orders.filter((order) => {
-      if (statusFilter !== 'ALL' && order.paymentStatus !== statusFilter) {
+      if (statusFilter === 'CANCELLED') {
+        if (order.logisticsStatus !== 'CANCELLED') return false
+      } else if (statusFilter === 'PENDING') {
+        if (order.paymentStatus !== 'PENDING' || order.logisticsStatus === 'CANCELLED') {
+          return false
+        }
+      } else if (statusFilter !== 'ALL' && order.paymentStatus !== statusFilter) {
         return false
       }
 
@@ -392,14 +405,12 @@ export default function Assisted_Sales_Client({
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto">
-      {/* 1. BARRA SUPERIOR COMPACTA COM BOTÃO "+ NOVA VENDA ASSISTIDA" */}
-      <div className="flex items-center justify-between gap-4 pb-2">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-mono font-bold uppercase tracking-wider text-slate-400">
-            Rascunhos de Venda Assistida
-          </span>
-          <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-slate-800 text-slate-300">
-            {orders.length}
+      {/* 1. BARRA SUPERIOR COMPACTA COM FATURAMENTO E BOTÃO "+ NOVA VENDA ASSISTIDA" */}
+      <div className="flex justify-between items-center w-full mb-4">
+        <div className="flex items-center gap-2 text-sm">
+          <span className="text-gray-400 font-medium">Faturamento</span>
+          <span className="text-emerald-400 font-bold tracking-wide">
+            {formatCurrency(metrics.revenue)}
           </span>
         </div>
 
@@ -416,52 +427,7 @@ export default function Assisted_Sales_Client({
         </button>
       </div>
 
-      {/* 2. MINI BARRA DE MÉTRICAS COMPACTA */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="p-3 rounded-xl bg-[#080d1e] border border-slate-800/80 flex items-center justify-between">
-          <div>
-            <span className="text-[11px] text-slate-400 block">Total</span>
-            <span className="text-lg font-bold font-mono text-slate-100">{metrics.total}</span>
-          </div>
-          <ShoppingBag className="w-4 h-4 text-slate-500" />
-        </div>
-
-        <div className="p-3 rounded-xl bg-[#080d1e] border border-slate-800/80 flex items-center justify-between">
-          <div>
-            <span className="text-[11px] text-slate-400 block">Aguardando</span>
-            <span className="text-lg font-bold font-mono text-amber-400 flex items-center gap-1.5">
-              {metrics.pending}
-              {metrics.pending > 0 && (
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
-                </span>
-              )}
-            </span>
-          </div>
-          <Clock className="w-4 h-4 text-amber-400" />
-        </div>
-
-        <div className="p-3 rounded-xl bg-[#080d1e] border border-slate-800/80 flex items-center justify-between">
-          <div>
-            <span className="text-[11px] text-slate-400 block">Pagos</span>
-            <span className="text-lg font-bold font-mono text-emerald-400">{metrics.paidCount}</span>
-          </div>
-          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-        </div>
-
-        <div className="p-3 rounded-xl bg-[#080d1e] border border-slate-800/80 flex items-center justify-between">
-          <div>
-            <span className="text-[11px] text-slate-400 block">Faturamento</span>
-            <span className="text-base font-bold font-mono text-emerald-400 truncate">
-              {formatCurrency(metrics.revenue)}
-            </span>
-          </div>
-          <DollarSign className="w-4 h-4 text-emerald-400" />
-        </div>
-      </div>
-
-      {/* 3. NOTIFICAÇÃO COMPACTA DO LINK RECÉM-CRIADO */}
+      {/* 2. NOTIFICAÇÃO COMPACTA DO LINK RECÉM-CRIADO */}
       {lastCreatedDraft && (
         <div className="p-3.5 rounded-xl bg-gradient-to-r from-cyan-950/90 via-[#071927] to-slate-950 border border-cyan-500/40 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs shadow-lg animate-in fade-in">
           <div className="flex items-center gap-2.5 truncate w-full sm:w-auto">
@@ -521,81 +487,96 @@ export default function Assisted_Sales_Client({
         </div>
       )}
 
+      {/* 3. MÉTRICAS E BARRA UNIFICADA DE BUSCA E FILTROS */}
+      <AdminMetricsAndFilterBar
+        metrics={[
+          {
+            id: 'total',
+            label: 'Total',
+            value: metrics.total,
+            valueColorClass: 'text-slate-100',
+            icon: <ShoppingBag className="w-5 h-5 text-slate-500" />,
+          },
+          {
+            id: 'pending',
+            label: 'Aguardando',
+            value: metrics.pending,
+            valueColorClass: 'text-amber-400',
+            icon: <Clock className="w-5 h-5 text-amber-400" />,
+            showPulseDot: metrics.pending > 0,
+            dotColorClass: 'bg-amber-400',
+          },
+          {
+            id: 'paid',
+            label: 'Pagos',
+            value: metrics.paidCount,
+            valueColorClass: 'text-emerald-400',
+            icon: <CheckCircle2 className="w-5 h-5 text-emerald-400" />,
+          },
+          {
+            id: 'cancelled',
+            label: 'Cancelados',
+            value: metrics.cancelledCount,
+            valueColorClass: 'text-red-500',
+            icon: <XCircle className="w-5 h-5 text-red-500" />,
+          },
+        ]}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        searchPlaceholder="Buscar por e-mail, ID ou nome da peça..."
+        activeFilter={statusFilter}
+        onFilterChange={setStatusFilter}
+        filters={[
+          {
+            id: 'ALL',
+            label: 'Todos',
+            count: orders.length,
+            icon: <Inbox className="w-3.5 h-3.5 text-cyan-400" />,
+            activeColorClass:
+              'bg-cyan-950/50 border-cyan-500/40 text-cyan-300 shadow-sm',
+          },
+          {
+            id: 'PENDING',
+            label: 'Aguardando',
+            count: metrics.pending,
+            icon: <Clock className="w-3.5 h-3.5 text-amber-400" />,
+            activeColorClass:
+              'bg-amber-950/50 border-amber-500/40 text-amber-300 shadow-sm',
+          },
+          {
+            id: 'PAID',
+            label: 'Pagos',
+            count: metrics.paidCount,
+            icon: <CreditCard className="w-3.5 h-3.5 text-emerald-400" />,
+            activeColorClass:
+              'bg-emerald-950/50 border-emerald-500/40 text-emerald-300 shadow-sm',
+          },
+          {
+            id: 'CANCELLED',
+            label: 'Cancelados',
+            count: metrics.cancelledCount,
+            icon: <XCircle className="w-3.5 h-3.5 text-rose-400" />,
+            activeColorClass:
+              'bg-rose-950/50 border-rose-500/40 text-rose-300 shadow-sm',
+          },
+        ]}
+        rightSlot={
+          <select
+            value={originFilter}
+            onChange={(e) => setOriginFilter(e.target.value as 'ALL' | OriginOption)}
+            aria-label="Filtrar por canal de origem"
+            className="px-3 py-2 bg-[#050811]/60 border border-gray-800/80 rounded-xl text-xs font-semibold text-gray-200 focus:outline-none focus:border-cyan-800/70 cursor-pointer"
+          >
+            <option value="ALL">Todas Origens</option>
+            <option value="WhatsApp">WhatsApp</option>
+            <option value="Instagram">Instagram</option>
+            <option value="Outro">Outro</option>
+          </select>
+        }
+      />
+
       {/* 4. TABELA DE GERENCIAMENTO (ORDER LIST) */}
       <div className="space-y-3">
-        {/* Barra de Filtros e Busca Rápida */}
-        <div className="p-3 rounded-2xl bg-[#080d1e] border border-slate-800/80 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shadow-lg">
-          <div className="relative flex-1">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Buscar por e-mail, ID ou nome da peça..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              aria-label="Buscar por e-mail, ID ou nome da peça"
-              className="w-full pl-9 pr-4 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-100 placeholder:text-slate-400 focus:outline-none focus:border-cyan-500"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-300 text-xs cursor-pointer"
-              >
-                Limpar
-              </button>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2">
-            <div className="flex items-center p-0.5 rounded-xl bg-slate-950 border border-slate-800 text-xs">
-              <button
-                type="button"
-                onClick={() => setStatusFilter('ALL')}
-                className={`px-2.5 py-1 rounded-lg transition font-medium cursor-pointer ${
-                  statusFilter === 'ALL'
-                    ? 'bg-cyan-600 text-white font-bold'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                Todos ({orders.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setStatusFilter('PENDING')}
-                className={`px-2.5 py-1 rounded-lg transition font-medium cursor-pointer ${
-                  statusFilter === 'PENDING'
-                    ? 'bg-amber-500 text-slate-950 font-bold'
-                    : 'text-amber-400/80 hover:text-amber-300'
-                }`}
-              >
-                Aguardando ({metrics.pending})
-              </button>
-              <button
-                type="button"
-                onClick={() => setStatusFilter('PAID')}
-                className={`px-2.5 py-1 rounded-lg transition font-medium cursor-pointer ${
-                  statusFilter === 'PAID'
-                    ? 'bg-emerald-600 text-white font-bold'
-                    : 'text-emerald-400/80 hover:text-emerald-300'
-                }`}
-              >
-                Pagos ({metrics.paidCount})
-              </button>
-            </div>
-
-            <select
-              value={originFilter}
-              onChange={(e) => setOriginFilter(e.target.value as 'ALL' | OriginOption)}
-              aria-label="Filtrar por canal de origem"
-              className="px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-cyan-500 cursor-pointer"
-            >
-              <option value="ALL">Todas Origens</option>
-              <option value="WhatsApp">WhatsApp</option>
-              <option value="Instagram">Instagram</option>
-              <option value="Outro">Outro</option>
-            </select>
-          </div>
-        </div>
 
         {/* Tabela de Gerenciamento Mestre */}
         <div className="rounded-2xl border border-slate-800/80 bg-[#080d1e]/90 shadow-2xl overflow-hidden backdrop-blur-sm">
@@ -626,6 +607,7 @@ export default function Assisted_Sales_Client({
                   {filteredOrders.map((order) => {
                     const orderOrigin = parseOrderOrigin(order.adminNotes)
                     const isPaid = order.paymentStatus === 'PAID'
+                    const isCancelled = order.logisticsStatus === 'CANCELLED'
                     const isCopied = copiedOrderId === order.id
                     const totalItems = order.items.reduce((acc, i) => acc + i.quantity, 0)
                     const formattedDate = new Date(order.createdAt).toLocaleDateString('pt-BR', {
@@ -703,9 +685,14 @@ export default function Assisted_Sales_Client({
                           </div>
                         </td>
 
-                        {/* 5. Status do Pagamento (Badge PENDING / PAID) */}
+                        {/* 5. Status do Pagamento (Badge CANCELLED / PAID / PENDING) */}
                         <td className="py-3 px-4">
-                          {isPaid ? (
+                          {isCancelled ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-rose-500/15 text-rose-300 border border-rose-500/30">
+                              <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
+                              <span>Cancelado</span>
+                            </span>
+                          ) : isPaid ? (
                             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
                               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                               <span>Pago</span>
@@ -721,10 +708,20 @@ export default function Assisted_Sales_Client({
                           )}
                         </td>
 
-                        {/* 6. Ação: Copiar Link (quando PENDING) */}
+                        {/* 6. Ação: Copiar Link (quando PENDING e não CANCELLED) */}
                         <td className="py-3 px-4 text-right">
                           <div className="flex items-center justify-end gap-1.5">
-                            {!isPaid ? (
+                            {isCancelled ? (
+                              <button
+                                type="button"
+                                disabled
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-900 text-slate-500 border border-slate-800 font-bold text-[11px] uppercase tracking-wider opacity-60 cursor-not-allowed"
+                                title="Link revogado: pedido cancelado"
+                              >
+                                <Copy className="w-3 h-3" />
+                                <span>Revogado</span>
+                              </button>
+                            ) : !isPaid ? (
                               <button
                                 type="button"
                                 onClick={() => handleCopyLink(order)}
@@ -749,26 +746,30 @@ export default function Assisted_Sales_Client({
                               </span>
                             )}
 
-                            {/* WhatsApp e Checkout */}
-                            <a
-                              href={getWhatsAppShareUrl(order)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="p-1.5 rounded-lg bg-emerald-900/60 hover:bg-emerald-800 text-emerald-300 hover:text-white border border-emerald-800/50 transition"
-                              title="Enviar no WhatsApp"
-                            >
-                              <Send className="w-3 h-3" />
-                            </a>
+                            {/* WhatsApp e Checkout (somente quando não cancelado) */}
+                            {!isCancelled && (
+                              <>
+                                <a
+                                  href={getWhatsAppShareUrl(order)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="p-1.5 rounded-lg bg-emerald-900/60 hover:bg-emerald-800 text-emerald-300 hover:text-white border border-emerald-800/50 transition"
+                                  title="Enviar no WhatsApp"
+                                >
+                                  <Send className="w-3 h-3" />
+                                </a>
 
-                            <a
-                              href={order.checkoutUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 transition"
-                              title="Abrir página de checkout"
-                            >
-                              <ExternalLink className="w-3 h-3" />
-                            </a>
+                                <a
+                                  href={order.checkoutUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 transition"
+                                  title="Abrir página de checkout"
+                                >
+                                  <ExternalLink className="w-3 h-3" />
+                                </a>
+                              </>
+                            )}
                           </div>
                         </td>
                       </tr>

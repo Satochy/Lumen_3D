@@ -50,7 +50,30 @@ export default function Admin_Header({ title, subtitle }: AdminHeaderProps) {
     subtitle: subtitle || 'Área restrita de gestão interna',
   }
 
-  const isProduction = process.env.NODE_ENV === 'production'
+  const rawEnv = (
+    process.env.NEXT_PUBLIC_APP_ENV ||
+    process.env.NODE_ENV ||
+    'development'
+  ).toLowerCase()
+
+  const envConfig =
+    rawEnv === 'production'
+      ? {
+          circleColor: 'text-red-500',
+          textColor: 'text-red-500',
+          label: 'Produção',
+        }
+      : rawEnv === 'staging' || rawEnv === 'test'
+        ? {
+            circleColor: 'text-amber-400',
+            textColor: 'text-amber-400',
+            label: 'Teste',
+          }
+        : {
+            circleColor: 'text-emerald-400',
+            textColor: 'text-emerald-400',
+            label: 'Desenvolvimento',
+          }
 
   return (
     <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 mb-8 border-b border-slate-800/80">
@@ -79,33 +102,26 @@ export default function Admin_Header({ title, subtitle }: AdminHeaderProps) {
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
             <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
           </span>
-          <span className="text-slate-400">Sistema:</span>
+          <span className="text-slate-400">API de Pagamento:</span>
           <span className="font-bold text-emerald-400 uppercase tracking-wider">
-            Operacional
+            Conectado
           </span>
         </div>
 
         {/* Badge de Ambiente */}
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#090e1d] border border-slate-800 text-[11px] font-mono shadow-sm">
-          <Circle
-            className={`w-2 h-2 fill-current ${
-              isProduction ? 'text-emerald-400' : 'text-amber-400'
-            }`}
-          />
-          <span className="text-slate-400">Modo:</span>
-          <span
-            className={`font-bold uppercase tracking-wider ${
-              isProduction ? 'text-emerald-300' : 'text-amber-300'
-            }`}
-          >
-            {isProduction ? 'Produção' : 'Dev / Sandbox'}
+          <Circle className={`w-2 h-2 fill-current ${envConfig.circleColor}`} />
+          <span className="text-slate-400">Ambiente:</span>
+          <span className={`font-bold uppercase tracking-wider ${envConfig.textColor}`}>
+            {envConfig.label}
           </span>
         </div>
 
         {/* Badge de Proteção RBAC */}
         <div className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-950/40 border border-cyan-800/50 text-[11px] text-cyan-300 font-medium shadow-sm">
           <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" />
-          <span className="font-mono text-[10px] uppercase font-bold tracking-wider">RBAC Ativo</span>
+          <span className="text-slate-400">Proteção RBAC:</span>
+          <span className="font-mono text-[10px] uppercase font-bold tracking-wider">Ativo</span>
         </div>
       </div>
     </header>

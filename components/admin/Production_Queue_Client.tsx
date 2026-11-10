@@ -6,7 +6,6 @@ import {
   Printer,
   CheckCircle2,
   Package,
-  Search,
   Check,
   Loader2,
   Clock,
@@ -24,6 +23,7 @@ import {
   advanceItemStatusAction,
   updateItemProductionStatusAction,
 } from '@/app/actions/production_actions'
+import { AdminMetricsAndFilterBar } from '@/components/admin/Admin_Metrics_And_Filter_Bar'
 
 interface ProductionQueueClientProps {
   initialItems: ProductionQueueItem[]
@@ -267,7 +267,7 @@ export default function Production_Queue_Client({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 max-w-7xl mx-auto">
       {/* Banner de Notificação de Auto-Avanço */}
       {successBanner && (
         <div className="p-4 rounded-2xl bg-teal-500/15 border border-teal-500/30 text-teal-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xl shadow-teal-950/30 animate-in fade-in duration-200">
@@ -302,117 +302,94 @@ export default function Production_Queue_Client({
         </div>
       )}
 
-      {/* 1. Alinhamento de Cabeçalho e Filtros (Tabs em Pílulas com foco em etapas) */}
-      <div className="flex flex-wrap items-center justify-between gap-2 pb-2">
-        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-          {/* Tab: Todos Ativos */}
-          <button
-            onClick={() => setActiveTab('todos')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-2 ${
-              activeTab === 'todos'
-                ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
-            }`}
-          >
-            <Layers className="w-3.5 h-3.5" />
-            <span>Todos Ativos</span>
-            <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-slate-800 text-slate-300 font-bold">
-              {activeItemsCount}
-            </span>
-          </button>
+      {/* 2. MÉTRICAS E BARRA UNIFICADA DE BUSCA E FILTROS */}
+      <AdminMetricsAndFilterBar
+        metrics={[
+          {
+            id: 'queued',
+            label: 'Peças na Fila',
+            value: naFilaCount,
+            valueColorClass: 'text-indigo-400',
+            icon: <Clock className="w-5 h-5 text-indigo-400" />,
+          },
+          {
+            id: 'printing',
+            label: 'Imprimindo',
+            value: imprimindoCount,
+            valueColorClass: 'text-sky-400',
+            icon: <Printer className="w-5 h-5 text-sky-400" />,
+            showPulseDot: imprimindoCount > 0,
+            dotColorClass: 'bg-sky-400',
+          },
+          {
+            id: 'post_processing',
+            label: 'Pós-Processamento',
+            value: posProcessamentoCount,
+            valueColorClass: 'text-purple-400',
+            icon: <Sparkles className="w-5 h-5 text-purple-400" />,
+          },
+          {
+            id: 'completed',
+            label: 'Concluídas',
+            value: concluidosCount,
+            valueColorClass: 'text-emerald-400',
+            icon: <CheckCircle2 className="w-5 h-5 text-emerald-400" />,
+          },
+        ]}
+        searchQuery={searchTerm}
+        onSearchChange={setSearchTerm}
+        searchPlaceholder="Buscar por peça, pedido ou cliente..."
+        activeFilter={activeTab}
+        onFilterChange={setActiveTab}
+        filters={[
+          {
+            id: 'todos',
+            label: 'Todos Ativos',
+            count: activeItemsCount,
+            icon: <Layers className="w-3.5 h-3.5 text-cyan-400" />,
+            activeColorClass:
+              'bg-cyan-950/50 border-cyan-500/40 text-cyan-300 shadow-sm',
+          },
+          {
+            id: 'na_fila',
+            label: 'Na Fila',
+            count: naFilaCount,
+            icon: <Clock className="w-3.5 h-3.5 text-indigo-400" />,
+            activeColorClass:
+              'bg-indigo-950/50 border-indigo-500/40 text-indigo-300 shadow-sm',
+          },
+          {
+            id: 'imprimindo',
+            label: 'Imprimindo',
+            count: imprimindoCount,
+            icon: <Printer className="w-3.5 h-3.5 text-sky-400" />,
+            activeColorClass:
+              'bg-sky-950/50 border-sky-500/40 text-sky-300 shadow-sm',
+          },
+          {
+            id: 'pos_processamento',
+            label: 'Pós-Processamento',
+            count: posProcessamentoCount,
+            icon: <Sparkles className="w-3.5 h-3.5 text-purple-400" />,
+            activeColorClass:
+              'bg-purple-950/50 border-purple-500/40 text-purple-300 shadow-sm',
+          },
+          {
+            id: 'concluidos',
+            label: 'Concluídos',
+            count: concluidosCount,
+            icon: <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />,
+            activeColorClass:
+              'bg-emerald-950/50 border-emerald-500/40 text-emerald-300 shadow-sm',
+          },
+        ]}
+      />
 
-          {/* Tab: Na Fila */}
-          <button
-            onClick={() => setActiveTab('na_fila')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-2 ${
-              activeTab === 'na_fila'
-                ? 'bg-indigo-500/15 text-indigo-300 border border-indigo-500/40'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
-            }`}
-          >
-            <Clock className="w-3.5 h-3.5 text-indigo-400" />
-            <span>Na Fila</span>
-            {naFilaCount > 0 && (
-              <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-indigo-500/20 text-indigo-300 font-bold">
-                {naFilaCount}
-              </span>
-            )}
-          </button>
-
-          {/* Tab: Imprimindo */}
-          <button
-            onClick={() => setActiveTab('imprimindo')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-2 ${
-              activeTab === 'imprimindo'
-                ? 'bg-sky-500/15 text-sky-300 border border-sky-500/40'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
-            }`}
-          >
-            <Printer className="w-3.5 h-3.5 text-sky-400" />
-            <span>Imprimindo</span>
-            {imprimindoCount > 0 && (
-              <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-sky-500/20 text-sky-300 font-bold">
-                {imprimindoCount}
-              </span>
-            )}
-          </button>
-
-          {/* Tab: Pós-Processamento */}
-          <button
-            onClick={() => setActiveTab('pos_processamento')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-2 ${
-              activeTab === 'pos_processamento'
-                ? 'bg-purple-500/15 text-purple-300 border border-purple-500/40'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
-            }`}
-          >
-            <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-            <span>Pós-Processamento</span>
-            {posProcessamentoCount > 0 && (
-              <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-purple-500/20 text-purple-300 font-bold">
-                {posProcessamentoCount}
-              </span>
-            )}
-          </button>
-
-          {/* Tab: Concluídos (Histórico Inalterável) */}
-          <button
-            onClick={() => setActiveTab('concluidos')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-2 ${
-              activeTab === 'concluidos'
-                ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/40'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
-            }`}
-          >
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Concluídos</span>
-            {concluidosCount > 0 && (
-              <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-emerald-500/20 text-emerald-300 font-bold">
-                {concluidosCount}
-              </span>
-            )}
-          </button>
-        </div>
-
-        {/* Campo de Busca Rápida alinhado à direita */}
-        <div className="relative w-full sm:w-64">
-          <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Buscar por peça, pedido ou cliente..."
-            aria-label="Buscar por peça, pedido ou cliente"
-            className="w-full pl-9 pr-3 py-2 bg-slate-950/80 border border-slate-800 rounded-xl text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-cyan-500"
-          />
-        </div>
-      </div>
-
-      {/* 2. Order List Table de Produção */}
-      <div className="rounded-2xl border border-slate-800/80 bg-[#080d1e]/90 shadow-2xl overflow-hidden backdrop-blur-sm">
+      {/* 4. Order List Table de Produção */}
+      <div>
         {filteredItems.length === 0 ? (
-          /* 3. Estado Vazio (Empty State) Refinado */
-          <div className="py-16 px-6 text-center text-slate-400 space-y-3">
+          /* Estado Vazio (Empty State) Refinado */
+          <div className="py-10 px-6 rounded-2xl bg-[#0a0e1a] border border-gray-800 text-center text-slate-400 space-y-3 max-w-2xl mx-auto">
             <div className="w-12 h-12 rounded-2xl bg-teal-500/10 border border-teal-500/20 text-teal-400 flex items-center justify-center mx-auto shadow-inner">
               <CheckCircle2 className="w-6 h-6" />
             </div>
@@ -441,7 +418,7 @@ export default function Production_Queue_Client({
             )}
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="rounded-2xl border border-slate-800/80 bg-[#080d1e]/90 overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-slate-800/80 bg-slate-950/60 text-[10px] font-mono uppercase tracking-wider text-slate-400">

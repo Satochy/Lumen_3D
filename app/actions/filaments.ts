@@ -98,3 +98,63 @@ export async function updateFilamentWeight(id: string, remainingGrams: number) {
     return { success: false, error: 'Erro ao atualizar peso do filamento.' }
   }
 }
+
+export async function createFilamentAction(formData: FormData): Promise<{
+  success: boolean
+  error?: string
+}> {
+  await requireAdmin()
+
+  const parsed = createFilamentSchema.safeParse({
+    material: formData.get('material'),
+    color: formData.get('color'),
+    hexColor: formData.get('hexColor') || '',
+    remainingGrams: formData.get('remainingGrams') || 0,
+    minThresholdGrams: formData.get('minThresholdGrams') || 200,
+  })
+
+  if (!parsed.success) {
+    return {
+      success: false,
+      error: parsed.error.issues[0]?.message || 'Dados inválidos.',
+    }
+  }
+
+  const { material, color, hexColor, remainingGrams, minThresholdGrams } =
+    parsed.data
+
+  try {
+    await prisma.filamentStock.create({
+      data: {
+        material: material.toUpperCase(),
+        color,
+        hexColor: hexColor || null,
+        remainingGrams,
+        minThresholdGrams,
+      },
+    })
+    revalidatePath('/admin/filaments')
+    revalidatePath('/admin')
+    return { success: true }
+  } catch (error) {
+    console.error('Erro ao criar filamento:', error)
+    return { success: false, error: 'Erro ao cadastrar bobina.' }
+  }
+}
+
+export async function deleteFilamentAction(id: string): Promise<{
+  success: boolean
+  error?: string
+}> {
+  await requireAdmin()
+
+  try {
+    await prisma.filamentStock.delete({ where: { id } })
+    revalidatePath('/admin/filaments')
+    revalidatePath('/admin')
+    return { success: true }
+  } catch (error) {
+    console.error('Erro ao excluir filamento:', error)
+    return { success: false, error: 'Erro ao excluir bobina do estoque.' }
+  }
+}

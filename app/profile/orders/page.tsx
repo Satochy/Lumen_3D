@@ -1,31 +1,12 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import type { PaymentStatus, LogisticsStatus } from '@prisma/client'
 import { Header, Footer } from '@/components/layout'
 import Profile_Navbar from '@/components/profile/Profile_Navbar'
+import My_Orders_Client from '@/components/profile/My_Orders_Client'
 import Cart_Button from '@/components/cart/Cart_Button'
 import { getCurrentUser } from '@/lib/auth'
 import { syncOrderWithMercadoPago } from '@/lib/mercadopago_sync'
-import { prisma } from '@/lib/prisma'
-import { formatCurrency } from '@/lib/format_currency'
-
-const paymentLabels: Record<PaymentStatus, { label: string; style: string }> = {
-  PENDING: { label: 'Aguardando Pagamento', style: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
-  PAID: { label: 'Pago', style: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
-  FAILED: { label: 'Recusado / Falhou', style: 'bg-rose-500/10 text-rose-400 border-rose-500/20' },
-  REFUNDED: { label: 'Reembolsado', style: 'bg-slate-500/10 text-slate-400 border-slate-500/20' },
-}
-
-const logisticsLabels: Record<LogisticsStatus, { label: string; style: string }> = {
-  PREPARING: { label: 'Preparando / Na Fila', style: 'bg-slate-500/10 text-slate-300 border-slate-500/20' },
-  PRODUCING: { label: 'Em Produção', style: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' },
-  PRINTING: { label: 'Em Produção (Impressão 3D)', style: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
-  POST_PROCESSING: { label: 'Em Acabamento', style: 'bg-purple-500/10 text-purple-400 border-purple-500/20' },
-  READY_FOR_SHIPPING: { label: 'Pronto para Envio', style: 'bg-teal-500/10 text-teal-400 border-teal-500/20' },
-  SHIPPED: { label: 'Enviado', style: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20' },
-  DELIVERED: { label: 'Entregue', style: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
-  CANCELLED: { label: 'Cancelado', style: 'bg-rose-500/10 text-rose-400 border-rose-500/20' },
-}
+import { getClientOrdersAction } from '@/app/actions/client_orders_actions'
 
 export default async function UserOrdersPage({
   searchParams,
@@ -46,13 +27,8 @@ export default async function UserOrdersPage({
     await syncOrderWithMercadoPago(resolvedSearchParams.orderId)
   }
 
-  const orders = await prisma.order.findMany({
-    where: { userId: user.id },
-    include: {
-      items: true,
-    },
-    orderBy: { createdAt: 'desc' },
-  })
+  const ordersResult = await getClientOrdersAction()
+  const orders = ordersResult.data
 
   return (
     <div className="min-h-screen bg-[#050811] text-slate-100 flex flex-col font-sans">
@@ -70,110 +46,14 @@ export default async function UserOrdersPage({
           </div>
           <Link
             href="/marketplace"
+            aria-label="Explorar o catálogo de produtos no Marketplace"
             className="px-4 py-2 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-bold transition w-fit"
           >
             Explorar Catálogo
           </Link>
         </div>
 
-        {orders.length === 0 ? (
-          <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-12 text-center space-y-4">
-            <p className="text-sm text-slate-400">Você ainda não realizou nenhum pedido.</p>
-            <Link
-              href="/marketplace"
-              className="inline-block px-5 py-2.5 bg-cyan-950/60 border border-cyan-800/60 hover:border-cyan-400 text-cyan-300 text-xs font-bold rounded-xl transition"
-            >
-              Ver Produtos no Marketplace
-            </Link>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {orders.map((order) => {
-              const payBadge = paymentLabels[order.paymentStatus]
-              const logBadge = logisticsLabels[order.logisticsStatus]
-              const itemsSubtotal = order.items.reduce(
-                (acc, item) => acc + Number(item.priceUnit) * item.quantity,
-                0
-              )
-              const totalWithShipping = itemsSubtotal + Number(order.shippingCost)
-
-              return (
-                <div
-                  key={order.id}
-                  className="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 space-y-4"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-4">
-                    <div>
-                      <p className="text-xs text-slate-400">
-                        Pedido <span className="font-mono text-slate-200">#{order.id.slice(0, 8)}</span>
-                      </p>
-                      <p className="text-[11px] text-slate-500 mt-0.5">
-                        Realizado em {new Date(order.createdAt).toLocaleDateString('pt-BR')}
-                      </p>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span
-                        className={`px-2.5 py-1 text-[11px] font-bold border rounded-md ${payBadge.style}`}
-                      >
-                        {payBadge.label}
-                      </span>
-                      <span
-                        className={`px-2.5 py-1 text-[11px] font-bold border rounded-md ${logBadge.style}`}
-                      >
-                        {logBadge.label}
-                      </span>
-                      {order.paymentStatus === 'PENDING' && (
-                        <Link
-                          href={`/marketplace/checkout/${order.id}`}
-                          className="px-3 py-1 text-[11px] font-bold rounded-md bg-cyan-500 hover:bg-cyan-400 text-slate-950 transition"
-                        >
-                          Pagar Agora
-                        </Link>
-                      )}
-                    </div>
-                  </div>
-
-                  <ul className="divide-y divide-slate-800/60 text-xs">
-                    {order.items.map((item) => (
-                      <li key={item.id} className="py-2.5 flex justify-between items-center">
-                        <div>
-                          <span className="font-semibold text-slate-200">{item.productTitle}</span>
-                          <span className="text-slate-400 ml-2">x{item.quantity}</span>
-                        </div>
-                        <span className="text-slate-300 font-medium">
-                          {formatCurrency(Number(item.priceUnit) * item.quantity)}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-
-                  <div className="pt-3 border-t border-slate-800 flex flex-wrap items-center justify-between gap-4 text-xs">
-                    <div className="text-slate-400">
-                      {order.trackingCode ? (
-                        <span>
-                          Código de Rastreio:{' '}
-                          <strong className="font-mono text-cyan-400">{order.trackingCode}</strong>
-                        </span>
-                      ) : (
-                        <span>Rastreio será disponibilizado após o envio.</span>
-                      )}
-                    </div>
-
-                    <div className="text-right">
-                      <span className="text-slate-400 mr-2">
-                        Frete: {formatCurrency(Number(order.shippingCost))}
-                      </span>
-                      <span className="text-sm font-black text-cyan-400">
-                        Total: {formatCurrency(totalWithShipping)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
+        <My_Orders_Client orders={orders} />
       </main>
 
       <Footer />
