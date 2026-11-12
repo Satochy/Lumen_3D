@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useTransition } from 'react'
 import Link from 'next/link'
-import type { PaymentStatus, LogisticsStatus } from '@prisma/client'
+import type { PaymentStatus } from '@prisma/client'
 import {
+  AlertCircle,
   ChevronDown,
   ChevronUp,
   ExternalLink,
@@ -13,8 +14,15 @@ import {
   Clock,
   CheckCircle2,
   MapPin,
+  XCircle,
 } from 'lucide-react'
-import type { SerializedClientOrder } from '@/app/actions/client_orders_actions'
+import { isOrderExpired } from '@/lib/order_presenter'
+import {
+  type SerializedClientOrder,
+  confirmOrderDeliveryByClientAction,
+  finalizeOrderByClientAction,
+  cancelOrderByClientAction,
+} from '@/app/actions/client_orders_actions'
 import { formatCurrency } from '@/lib/format_currency'
 
 const paymentLabels: Record<PaymentStatus, { label: string; style: string }> = {
@@ -36,39 +44,89 @@ const paymentLabels: Record<PaymentStatus, { label: string; style: string }> = {
   },
 }
 
-const logisticsLabels: Record<LogisticsStatus, { label: string; style: string }> = {
-  PREPARING: {
-    label: 'Preparando / Na Fila',
+function getClientLogisticsBadge(order: SerializedClientOrder): { label: string; style: string } {
+  if (order.logisticsStatus === 'CANCELLED' || Boolean(order.cancelledAt)) {
+    return {
+      label: 'Cancelado pelo Cliente',
+      style: 'bg-rose-500/10 text-rose-400 border-rose-500/20',
+    }
+  }
+
+  if (isOrderExpired(order)) {
+    return {
+      label: '',
+      style: 'hidden',
+    }
+  }
+
+  if (order.paymentStatus !== 'PAID') {
+    return {
+      label: 'Aguardando Pagamento',
+      style: 'bg-slate-500/10 text-slate-400 border-slate-700/60',
+    }
+  }
+
+  if (
+    order.logisticsStatus === 'PREPARING' ||
+    order.logisticsStatus === 'PRODUCING' ||
+    order.logisticsStatus === 'PRINTING' ||
+    order.logisticsStatus === 'POST_PROCESSING'
+  ) {
+    if (order.isHybrid) {
+      return {
+        label: 'Aguardando Produção',
+        style: 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30',
+      }
+    }
+    if (order.logisticsStatus === 'PREPARING') {
+      return {
+        label: 'Na Fila',
+        style: 'bg-slate-500/10 text-slate-300 border-slate-500/20',
+      }
+    }
+    return {
+      label: 'Em Produção',
+      style: 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30',
+    }
+  }
+
+  if (order.logisticsStatus === 'READY_FOR_SHIPPING') {
+    return {
+      label: 'Aguardando Envio',
+      style: 'bg-teal-500/15 text-teal-300 border-teal-500/30',
+    }
+  }
+
+  if (order.logisticsStatus === 'SHIPPED') {
+    if (order.isLocalDelivery) {
+      return {
+        label: 'Enviado',
+        style: 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30',
+      }
+    }
+    return {
+      label: 'A Caminho',
+      style: 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30',
+    }
+  }
+
+  if (order.logisticsStatus === 'DELIVERED') {
+    if (order.isFinalized) {
+      return {
+        label: 'Finalizado',
+        style: 'bg-emerald-500 text-slate-950 font-black border-emerald-400 shadow-sm',
+      }
+    }
+    return {
+      label: 'Entregue',
+      style: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+    }
+  }
+
+  return {
+    label: 'Na Fila',
     style: 'bg-slate-500/10 text-slate-300 border-slate-500/20',
-  },
-  PRODUCING: {
-    label: 'Em Produção',
-    style: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20',
-  },
-  PRINTING: {
-    label: 'Em Produção (Impressão 3D)',
-    style: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
-  },
-  POST_PROCESSING: {
-    label: 'Em Acabamento',
-    style: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
-  },
-  READY_FOR_SHIPPING: {
-    label: 'Pronto para Envio',
-    style: 'bg-teal-500/10 text-teal-400 border-teal-500/20',
-  },
-  SHIPPED: {
-    label: 'Enviado',
-    style: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
-  },
-  DELIVERED: {
-    label: 'Entregue',
-    style: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-  },
-  CANCELLED: {
-    label: 'Cancelado',
-    style: 'bg-rose-500/10 text-rose-400 border-rose-500/20',
-  },
+  }
 }
 
 interface MyOrdersClientProps {
@@ -76,6 +134,9 @@ interface MyOrdersClientProps {
 }
 
 export default function My_Orders_Client({ orders }: MyOrdersClientProps) {
+  const [isPending, startTransition] = useTransition()
+  const [localOrders, setLocalOrders] = useState<SerializedClientOrder[]>(orders)
+
   // Inicia expandido para o pedido mais recente se existir
   const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>(() => {
     if (orders.length > 0) {
@@ -91,7 +152,73 @@ export default function My_Orders_Client({ orders }: MyOrdersClientProps) {
     }))
   }
 
-  if (orders.length === 0) {
+  const handleConfirmReceipt = (orderId: string) => {
+    if (!window.confirm('Confirma que recebeu esta encomenda em mãos?')) return
+    startTransition(async () => {
+      const res = await confirmOrderDeliveryByClientAction(orderId)
+      if (res.success) {
+        setLocalOrders((prev) =>
+          prev.map((o) =>
+            o.id === orderId
+              ? {
+                  ...o,
+                  logisticsStatus: 'DELIVERED',
+                  deliveredAt: new Date().toISOString(),
+                }
+              : o
+          )
+        )
+      } else {
+        alert(res.error || 'Não foi possível confirmar o recebimento.')
+      }
+    })
+  }
+
+  const handleFinalizeOrder = (orderId: string) => {
+    if (
+      !window.confirm(
+        'Deseja finalizar este pedido agora? Esta ação é definitiva e conclui a compra.'
+      )
+    )
+      return
+    startTransition(async () => {
+      const res = await finalizeOrderByClientAction(orderId)
+      if (res.success) {
+        setLocalOrders((prev) =>
+          prev.map((o) => (o.id === orderId ? { ...o, isFinalized: true } : o))
+        )
+      } else {
+        alert(res.error || 'Não foi possível finalizar o pedido.')
+      }
+    })
+  }
+
+  const handleCancelOrder = (orderId: string) => {
+    const reason = window.prompt(
+      'Tem certeza que deseja cancelar este pedido? Se sim, informe o motivo (opcional):'
+    )
+    if (reason === null) return // Usuário cancelou o prompt
+    startTransition(async () => {
+      const res = await cancelOrderByClientAction(orderId, reason || undefined)
+      if (res.success) {
+        setLocalOrders((prev) =>
+          prev.map((o) =>
+            o.id === orderId
+              ? {
+                  ...o,
+                  logisticsStatus: 'CANCELLED',
+                  cancelledAt: new Date().toISOString(),
+                }
+              : o
+          )
+        )
+      } else {
+        alert(res.error || 'Não foi possível cancelar o pedido.')
+      }
+    })
+  }
+
+  if (localOrders.length === 0) {
     return (
       <div className="bg-[#0a0e1a] border border-slate-800/80 rounded-2xl p-12 text-center space-y-5">
         <div className="w-14 h-14 mx-auto rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400">
@@ -116,19 +243,29 @@ export default function My_Orders_Client({ orders }: MyOrdersClientProps) {
 
   return (
     <div className="space-y-4">
-      {orders.map((order) => {
+      {localOrders.map((order) => {
         const shortId = order.id.slice(0, 8)
         const isExpanded = Boolean(expandedIds[order.id])
         const detailsPanelId = `order-details-${order.id}`
         const isCancelled =
           order.logisticsStatus === 'CANCELLED' || Boolean(order.cancelledAt)
-        const isExpired = Boolean(
-          order.paymentStatus === 'PENDING' &&
-            order.expiresAt &&
-            new Date(order.expiresAt) < new Date()
-        )
+        const isExpired = isOrderExpired(order)
         const canPayNow =
           order.paymentStatus === 'PENDING' && !isCancelled && !isExpired
+
+        const canCancelClient =
+          !isCancelled &&
+          !isExpired &&
+          !order.isFinalized &&
+          !['SHIPPED', 'DELIVERED'].includes(order.logisticsStatus)
+
+        const canConfirmLocalReceipt =
+          order.logisticsStatus === 'SHIPPED' &&
+          order.isLocalDelivery &&
+          !order.isFinalized
+
+        const canFinalizeNow =
+          order.logisticsStatus === 'DELIVERED' && !order.isFinalized
 
         const payBadge =
           isCancelled && order.paymentStatus === 'PENDING'
@@ -138,11 +275,11 @@ export default function My_Orders_Client({ orders }: MyOrdersClientProps) {
               }
             : isExpired
             ? {
-                label: 'Prazo Expirado',
-                style: 'bg-slate-500/10 text-slate-400 border-slate-500/20',
+                label: 'Cancelado',
+                style: 'bg-rose-500/10 text-rose-400 border-rose-500/20',
               }
             : paymentLabels[order.paymentStatus]
-        const logBadge = logisticsLabels[order.logisticsStatus]
+        const logBadge = getClientLogisticsBadge(order)
         const purchaseDate = new Date(order.createdAt).toLocaleDateString('pt-BR', {
           day: '2-digit',
           month: '2-digit',
@@ -199,7 +336,7 @@ export default function My_Orders_Client({ orders }: MyOrdersClientProps) {
                   </span>
                   {!(isCancelled && order.paymentStatus === 'PENDING') && (
                     <span
-                      className={`px-2.5 py-1 text-[11px] font-bold border rounded-md ${logBadge.style}`}
+                      className={`px-2.5 py-1 text-[11px] font-bold border rounded-md uppercase tracking-wider ${logBadge.style}`}
                     >
                       {logBadge.label}
                     </span>
@@ -208,15 +345,15 @@ export default function My_Orders_Client({ orders }: MyOrdersClientProps) {
               </div>
 
               {/* Valor Total e Ações */}
-              <div className="flex flex-wrap items-center justify-between lg:justify-end gap-4 pt-3 lg:pt-0 border-t lg:border-t-0 border-slate-800/80">
-                <div className="text-left lg:text-right">
+              <div className="flex flex-wrap items-center justify-between lg:justify-end gap-3 pt-3 lg:pt-0 border-t lg:border-t-0 border-slate-800/80">
+                <div className="text-left lg:text-right mr-1">
                   <p className="text-[11px] text-slate-400">Total do Pedido</p>
                   <p className="text-base font-black text-cyan-400">
                     {formatCurrency(order.totalAmount)}
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   {canPayNow && (
                     <Link
                       href={`/marketplace/checkout/${order.id}`}
@@ -225,6 +362,45 @@ export default function My_Orders_Client({ orders }: MyOrdersClientProps) {
                     >
                       Pagar Agora
                     </Link>
+                  )}
+
+                  {canConfirmLocalReceipt && (
+                    <button
+                      type="button"
+                      onClick={() => handleConfirmReceipt(order.id)}
+                      disabled={isPending}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition shadow-sm cursor-pointer disabled:opacity-50"
+                      title="Confirmar recebimento do pacote entregue pela frota local"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Confirmar Recebimento</span>
+                    </button>
+                  )}
+
+                  {canFinalizeNow && (
+                    <button
+                      type="button"
+                      onClick={() => handleFinalizeOrder(order.id)}
+                      disabled={isPending}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition shadow-sm cursor-pointer disabled:opacity-50"
+                      title="Finalizar e concluir pedido agora"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Finalizar Pedido</span>
+                    </button>
+                  )}
+
+                  {canCancelClient && (
+                    <button
+                      type="button"
+                      onClick={() => handleCancelOrder(order.id)}
+                      disabled={isPending}
+                      className="inline-flex items-center gap-1 px-3 py-2 text-xs font-semibold rounded-xl bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-800/40 transition cursor-pointer disabled:opacity-50"
+                      title="Cancelar este pedido"
+                    >
+                      <XCircle className="w-3.5 h-3.5 text-rose-400" />
+                      <span>Cancelar</span>
+                    </button>
                   )}
 
                   <button
@@ -249,6 +425,58 @@ export default function My_Orders_Client({ orders }: MyOrdersClientProps) {
                 </div>
               </div>
             </div>
+
+            {/* Banner de Timeout de Pagamento */}
+            {isExpired && (
+              <div className="mx-5 sm:mx-6 mb-4 p-3.5 rounded-xl bg-gray-950/20 border border-gray-500/30 flex items-center gap-2.5 text-xs text-gray-300">
+                <AlertCircle className="w-4 h-4 text-gray-400 shrink-0" />
+                <span>
+                  O prazo de pagamento deste pedido expirou.
+                </span>
+              </div>
+            )}
+
+            {/* Banner de Entrega Local em Trânsito (Frota Própria) */}
+            {canConfirmLocalReceipt && (
+              <div className="mx-5 sm:mx-6 mb-4 p-3.5 rounded-xl bg-cyan-950/30 border border-cyan-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2.5">
+                  <Truck className="w-4 h-4 text-cyan-400 shrink-0" />
+                  <span className="text-slate-200">
+                    Sua encomenda saiu para entrega sob responsabilidade da Lúmen 3D. Já recebeu o produto?
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleConfirmReceipt(order.id)}
+                  disabled={isPending}
+                  className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg transition shrink-0 cursor-pointer disabled:opacity-50"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Confirmar Recebimento</span>
+                </button>
+              </div>
+            )}
+
+            {/* Banner da Janela de 3 Dias para Pedidos DELIVERED e ainda não finalizados */}
+            {canFinalizeNow && (
+              <div className="mx-5 sm:mx-6 mb-4 p-3.5 rounded-xl bg-emerald-950/30 border border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2.5">
+                  <Clock className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span className="text-slate-200">
+                    Sua encomenda foi entregue. Este pedido será finalizado automaticamente após 3 dias da entrega.
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleFinalizeOrder(order.id)}
+                  disabled={isPending}
+                  className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg transition shrink-0 cursor-pointer disabled:opacity-50"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Finalizar Agora</span>
+                </button>
+              </div>
+            )}
 
             {/* Banner Crítico de Rastreio quando SHIPPED ou DELIVERED com trackingCode */}
             {showTrackingHighlight && trackingUrl && (

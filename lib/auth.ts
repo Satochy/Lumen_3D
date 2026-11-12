@@ -10,6 +10,8 @@ export interface User {
   email: string
   role: 'ADMIN' | 'CLIENT'
   avatarUrl: string | null
+  cpf?: string | null
+  phone?: string | null
   emailConfirmedAt?: string | null
 }
 
@@ -20,6 +22,8 @@ const userSelectFields = {
   email: true,
   role: true,
   avatarUrl: true,
+  cpf: true,
+  phone: true,
 } as const
 
 /**
@@ -60,6 +64,8 @@ export const getCurrentUser = cache(async (): Promise<User | null> => {
     email: dbUser.email,
     role: dbUser.role,
     avatarUrl: dbUser.avatarUrl ?? null,
+    cpf: dbUser.cpf ?? null,
+    phone: dbUser.phone ?? null,
     emailConfirmedAt: supabaseUser.email_confirmed_at ?? null,
   }
 })

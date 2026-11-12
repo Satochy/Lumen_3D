@@ -1,11 +1,19 @@
+import { Suspense } from 'react'
 import { requireAdmin } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import Product_Manager_Client, {
   type SerializedAdminProduct,
 } from '@/components/admin/Product_Manager_Client'
 
-export default async function AdminProductsPage() {
+export default async function AdminProductsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ action?: string }>
+}) {
   await requireAdmin()
+
+  const resolvedParams = searchParams ? await searchParams : undefined
+  const defaultOpenCreateModal = resolvedParams?.action === 'new'
 
   // O admin enxerga todos os produtos, inclusive arquivados.
   const products = await prisma.product.findMany({
@@ -33,5 +41,12 @@ export default async function AdminProductsPage() {
     orderItemsCount: p._count.orderItems,
   }))
 
-  return <Product_Manager_Client initialProducts={serializedProducts} />
+  return (
+    <Suspense fallback={null}>
+      <Product_Manager_Client
+        initialProducts={serializedProducts}
+        defaultOpenCreateModal={defaultOpenCreateModal}
+      />
+    </Suspense>
+  )
 }

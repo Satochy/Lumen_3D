@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useTransition } from 'react'
+import React, { useState, useEffect, useTransition } from 'react'
 import Link from 'next/link'
 import {
   Printer,
@@ -21,12 +21,16 @@ import { OrderItemProductionStatus } from '@prisma/client'
 import {
   type ProductionQueueItem,
   advanceItemStatusAction,
-  updateItemProductionStatusAction,
 } from '@/app/actions/production_actions'
 import { AdminMetricsAndFilterBar } from '@/components/admin/Admin_Metrics_And_Filter_Bar'
+import {
+  resolveOrderClientIdentity,
+  type PresentableOrderInput,
+} from '@/lib/order_presenter'
 
 interface ProductionQueueClientProps {
   initialItems: ProductionQueueItem[]
+  initialSearch?: string
 }
 
 type TabKey = 'todos' | 'na_fila' | 'imprimindo' | 'pos_processamento' | 'concluidos'
@@ -113,16 +117,39 @@ function renderVariantBadge(snapshot: unknown) {
 
 export default function Production_Queue_Client({
   initialItems,
+  initialSearch = '',
 }: ProductionQueueClientProps) {
   const [items, setItems] = useState<ProductionQueueItem[]>(initialItems)
   const [activeTab, setActiveTab] = useState<TabKey>('todos')
   const [loadingItemId, setLoadingItemId] = useState<string | null>(null)
-  const [searchTerm, setSearchTerm] = useState<string>('')
+  const [searchTerm, setSearchTerm] = useState<string>(
+    () =>
+      initialSearch ||
+      (typeof window !== 'undefined'
+        ? new URLSearchParams(window.location.search).get('search') || ''
+        : '')
+  )
   const [, startTransition] = useTransition()
   const [successBanner, setSuccessBanner] = useState<{
     orderId: string
     shortId: string
   } | null>(null)
+
+  // Limpa o parâmetro search da URL após montar
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.search) {
+      const params = new URLSearchParams(window.location.search)
+      if (params.has('search')) {
+        params.delete('search')
+        const newQuery = params.toString() ? `?${params.toString()}` : ''
+        window.history.replaceState(
+          {},
+          '',
+          `${window.location.pathname}${newQuery}${window.location.hash}`
+        )
+      }
+    }
+  }, [])
 
   // Cálculo de dias decorridos desde a compra
   const getElapsedDays = (createdAtStr: string) => {
@@ -166,9 +193,14 @@ export default function Production_Queue_Client({
 
     if (searchTerm.trim()) {
       const q = searchTerm.toLowerCase()
+      const { clientName, clientEmail } = resolveOrderClientIdentity(
+        item.order as unknown as PresentableOrderInput
+      )
       const matchProduct = item.productTitle.toLowerCase().includes(q)
       const matchOrder = item.order.id.toLowerCase().includes(q)
       const matchUser =
+        clientName.toLowerCase().includes(q) ||
+        clientEmail.toLowerCase().includes(q) ||
         item.order.user?.name?.toLowerCase().includes(q) ||
         item.order.user?.username?.toLowerCase().includes(q) ||
         item.order.user?.email?.toLowerCase().includes(q)
@@ -215,51 +247,6 @@ export default function Production_Queue_Client({
       } catch (err: unknown) {
         console.error('Erro na ação:', err)
         alert('Ocorreu um erro ao atualizar o item.')
-      } finally {
-        setLoadingItemId(null)
-      }
-    })
-  }
-
-  // Concluir diretamente a peça (Marcar Pronto)
-  const handleDirectComplete = (orderItemId: string) => {
-    if (loadingItemId) return
-    const targetItem = items.find((i) => i.id === orderItemId)
-    setLoadingItemId(orderItemId)
-
-    startTransition(async () => {
-      try {
-        const res = await updateItemProductionStatusAction(
-          orderItemId,
-          OrderItemProductionStatus.READY
-        )
-        if (res.success) {
-          const nowStr = new Date().toISOString()
-          setItems((prev) =>
-            prev.map((i) =>
-              i.id === orderItemId
-                ? {
-                    ...i,
-                    productionStatus: OrderItemProductionStatus.READY,
-                    isReady: true,
-                    readyAt: nowStr,
-                  }
-                : i
-            )
-          )
-
-          if (res.orderMovedToReady && targetItem) {
-            setSuccessBanner({
-              orderId: targetItem.orderId,
-              shortId: targetItem.orderId.slice(-6).toUpperCase(),
-            })
-          }
-        } else {
-          alert(res.error || 'Erro ao concluir peça.')
-        }
-      } catch (err: unknown) {
-        console.error('Erro na ação:', err)
-        alert('Ocorreu um erro ao concluir a peça.')
       } finally {
         setLoadingItemId(null)
       }
@@ -451,6 +438,10 @@ export default function Production_Queue_Client({
                     statusBadges[item.productionStatus] || statusBadges.QUEUED
                   const isLoading = loadingItemId === item.id
 
+                  const { clientName } = resolveOrderClientIdentity(
+                    item.order as unknown as PresentableOrderInput
+                  )
+
                   return (
                     <tr
                       key={item.id}
@@ -467,7 +458,7 @@ export default function Production_Queue_Client({
                         <div className="space-y-0.5">
                           <div className="flex items-center gap-1.5">
                             <Link
-                              href="/admin/orders"
+                              href={`/admin/orders?search=${item.order.id.slice(-6).toUpperCase()}&expand=${item.order.id}`}
                               className="font-bold text-slate-100 hover:text-cyan-300 transition text-xs"
                               title="Ver pedido no Gerenciar Vendas"
                             >
@@ -482,13 +473,12 @@ export default function Production_Queue_Client({
                               </span>
                             )}
                           </div>
-                          <p className="text-[11px] text-slate-400 flex items-center gap-1 font-sans truncate max-w-[150px]">
+                          <p
+                            className="text-[11px] text-slate-400 flex items-center gap-1 font-sans truncate max-w-[150px]"
+                            title={clientName}
+                          >
                             <User className="w-3 h-3 text-slate-500 shrink-0" />
-                            <span className="truncate">
-                              {item.order.user?.name ||
-                                item.order.user?.username ||
-                                'Cliente Balcão'}
-                            </span>
+                            <span className="truncate">{clientName}</span>
                           </p>
                         </div>
                       </td>
@@ -631,19 +621,6 @@ export default function Production_Queue_Client({
                                     <Check className="w-3.5 h-3.5" />
                                   )}
                                   <span>Concluir Peça</span>
-                                </button>
-                              )}
-
-                              {/* Atalho direto para Concluir Peça (Marcar Pronto) se ainda em QUEUED ou PRINTING */}
-                              {item.productionStatus !== OrderItemProductionStatus.POST_PROCESSING && (
-                                <button
-                                  onClick={() => handleDirectComplete(item.id)}
-                                  disabled={isLoading || Boolean(loadingItemId)}
-                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-emerald-400 hover:text-emerald-300 border border-slate-800 text-xs font-semibold transition cursor-pointer disabled:cursor-not-allowed"
-                                  title="Pular etapas e marcar diretamente como pronta"
-                                >
-                                  <Check className="w-3 h-3" />
-                                  <span className="hidden sm:inline">Pronto</span>
                                 </button>
                               )}
                             </div>

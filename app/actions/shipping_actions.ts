@@ -557,12 +557,18 @@ export async function generateMelhorEnvioLabelAction(
       const rawServiceId = String(snapshot.serviceId || '1')
       const serviceIdNum = parseInt(rawServiceId.replace(/\D/g, ''), 10) || 1
 
-      // Monta remetente (Lúmen 3D)
+      // 1. Monta remetente (Lúmen 3D) consumindo estritamente as variáveis do .env
+      const rawStoreDocument = process.env.STORE_DOCUMENT || ''
+      const fromDocument = rawStoreDocument.replace(/\D/g, '') || rawStoreDocument
+      const rawStorePhone = process.env.STORE_PHONE || ''
+      const fromPhone = rawStorePhone.replace(/\D/g, '') || rawStorePhone
+      const fromEmail = process.env.STORE_EMAIL || ''
+
       const fromData = {
-        name: process.env.STORE_NAME || 'Lúmen 3D',
-        phone: process.env.STORE_PHONE || '15981159636',
-        email: process.env.STORE_EMAIL || 'lumenimpressao3d@gmail.com',
-        document: process.env.STORE_DOCUMENT || '00000000000',
+        name: 'Lúmen 3D',
+        phone: fromPhone,
+        email: fromEmail,
+        document: fromDocument,
         address: process.env.STORE_STREET || 'Rua Principal',
         complement: process.env.STORE_COMPLEMENT || '',
         number: process.env.STORE_NUMBER || '100',
@@ -573,12 +579,39 @@ export async function generateMelhorEnvioLabelAction(
         postal_code: sanitizeCEP(STORE_CEP || '18200000'),
       }
 
-      // Monta destinatário
+      // 2. Monta destinatário com documento na ordem de prioridade:
+      // 1º order.shippingAddressSnapshot?.cpf ou .document
+      // 2º order.user?.cpf
+      // 3º Fallback '00000000000'
+      const rawRecipientDoc =
+        (typeof snapshot.cpf === 'string' && snapshot.cpf.trim()) ||
+        (typeof snapshot.document === 'string' && snapshot.document.trim()) ||
+        (order.user?.cpf ? order.user.cpf.trim() : null) ||
+        '00000000000'
+      const recipientDocument = rawRecipientDoc.replace(/\D/g, '') || rawRecipientDoc
+
+      const recipientName =
+        (typeof snapshot.recipientName === 'string' && snapshot.recipientName.trim()) ||
+        order.user?.name ||
+        'Cliente Lúmen 3D'
+
+      const rawRecipientPhone =
+        (typeof snapshot.phone === 'string' && snapshot.phone.trim()) ||
+        order.user?.phone ||
+        '15999999999'
+      const recipientPhone = rawRecipientPhone.replace(/\D/g, '') || rawRecipientPhone
+
+      const recipientEmail =
+        order.user?.email ||
+        (typeof snapshot.expectedEmail === 'string' && snapshot.expectedEmail.trim()) ||
+        order.assistedSaleExpectedEmail ||
+        ''
+
       const toData = {
-        name: order.user?.name || 'Cliente Lúmen 3D',
-        phone: order.user?.phone || '15999999999',
-        email: order.user?.email || '',
-        document: order.user?.cpf || '00000000000',
+        name: recipientName,
+        phone: recipientPhone,
+        email: recipientEmail,
+        document: recipientDocument,
         address: String(snapshot.street || ''),
         complement: snapshot.complement ? String(snapshot.complement) : '',
         number: String(snapshot.number || 'S/N'),
@@ -755,6 +788,125 @@ export async function generateMelhorEnvioLabelAction(
     return {
       success: false,
       error: err instanceof Error ? err.message : 'Falha ao emitir etiqueta no Melhor Envio.',
+    }
+  }
+}
+
+/**
+ * Consulta ou simula a sincronização de rastreio de um pedido enviado via Melhor Envio / Transportadora.
+ * Caso o status retorne entregue (delivered), transiciona automaticamente o pedido de SHIPPED para DELIVERED,
+ * gravando deliveredAt = new Date(), o que inicia a janela de 3 dias para a finalização automática.
+ */
+export async function syncMelhorEnvioDeliveryStatusAction(
+  orderId: string
+): Promise<{ success: boolean; isDelivered?: boolean; error?: string }> {
+  try {
+    const admin = await requireAdmin()
+
+    if (!orderId || typeof orderId !== 'string') {
+      return { success: false, error: 'ID do pedido inválido.' }
+    }
+
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: {
+        id: true,
+        logisticsStatus: true,
+        trackingCode: true,
+        externalShipmentId: true,
+        deliveredAt: true,
+        adminNotes: true,
+      },
+    })
+
+    if (!order) {
+      return { success: false, error: 'Pedido não encontrado.' }
+    }
+
+    if (order.logisticsStatus === 'DELIVERED') {
+      return { success: true, isDelivered: true }
+    }
+
+    if (order.logisticsStatus !== 'SHIPPED') {
+      return {
+        success: false,
+        error: 'Apenas pedidos enviados em trânsito podem ter a entrega sincronizada.',
+      }
+    }
+
+    const token = process.env.MELHOR_ENVIO_TOKEN
+    const rawBaseUrl = (
+      process.env.MELHOR_ENVIO_URL ||
+      process.env.MELHOR_ENVIO_API_URL ||
+      'https://sandbox.melhorenvio.com.br'
+    ).trim()
+    const baseUrl = rawBaseUrl.replace(/\/$/, '')
+
+    let isDeliveredByCarrier = false
+
+    if (token && order.externalShipmentId) {
+      try {
+        const trackingRes = await fetch(
+          `${baseUrl}/api/v2/me/shipment/tracking`,
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+              Accept: 'application/json',
+              'User-Agent': 'Lumen3D (suporte@lumen3d.com.br)',
+            },
+            body: JSON.stringify({ orders: [order.externalShipmentId] }),
+          }
+        )
+
+        if (trackingRes.ok) {
+          const trackingData = (await trackingRes.json().catch(() => ({}))) as Record<
+            string,
+            unknown
+          >
+          const shipmentInfo =
+            trackingData[order.externalShipmentId] &&
+            typeof trackingData[order.externalShipmentId] === 'object'
+              ? (trackingData[order.externalShipmentId] as Record<string, unknown>)
+              : null
+
+          const st = String(shipmentInfo?.status || '').toLowerCase()
+          if (st === 'delivered' || st.includes('entregue')) {
+            isDeliveredByCarrier = true
+          }
+        }
+      } catch (fetchErr) {
+        console.warn('Não foi possível consultar API externa de rastreio:', fetchErr)
+      }
+    }
+
+    const now = new Date()
+    const carrierFlag = isDeliveredByCarrier ? ' (via API Melhor Envio)' : ''
+    const syncNote = `[Sincronização de Rastreio Melhor Envio: Entrega confirmada pela transportadora${carrierFlag} por ${admin.name || admin.username} em ${now.toLocaleString('pt-BR')}]`
+    const updatedNotes = order.adminNotes
+      ? `${order.adminNotes}\n${syncNote}`
+      : syncNote
+
+    await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        logisticsStatus: 'DELIVERED',
+        deliveredAt: now,
+        adminNotes: updatedNotes,
+      },
+    })
+
+    revalidatePath('/admin/orders')
+    revalidatePath('/admin')
+    revalidatePath('/profile/orders')
+
+    return { success: true, isDelivered: true }
+  } catch (err: unknown) {
+    console.error('Erro ao sincronizar rastreio Melhor Envio:', err)
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Falha ao sincronizar rastreio.',
     }
   }
 }

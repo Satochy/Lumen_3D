@@ -4,6 +4,7 @@ import { cookies } from 'next/headers'
 import { XCircle } from 'lucide-react'
 import { Header, Footer } from '@/components/layout'
 import Cart_Button from '@/components/cart/Cart_Button'
+import { isOrderExpired } from '@/lib/order_presenter'
 import Checkout_Client, {
   type SerializedCheckoutOrder,
   type ShippingSnapshotData,
@@ -26,35 +27,16 @@ export default async function CheckoutOrderPage({
     searchParams ? searchParams : Promise.resolve(undefined),
   ])
   const user = await getCurrentUser()
-  const cookieStore = await cookies()
-  const isUnlocked = cookieStore.get(`unlocked_order_${id}`)?.value === 'true'
-
-  // Se não estiver logado e NÃO tiver cookie de desbloqueio, redireciona para login
-  if (!user && !isUnlocked) {
-    redirect(`/login?redirect=/marketplace/checkout/${id}`)
-  }
-
   const normalizedUserEmail = user?.email?.trim().toLowerCase()
 
   const order = await prisma.order.findFirst({
     where: {
       id,
       OR: [
-        // Pedidos regulares do próprio comprador (não-venda assistida)
-        ...(user ? [{ userId: user.id, isAssistedSale: false }] : []),
-        // Venda assistida: EXCLUSIVAMENTE vinculada ao e-mail esperado do orçamento (Regra V21)
-        ...(user && normalizedUserEmail
-          ? [
-              {
-                isAssistedSale: true,
-                assistedSaleExpectedEmail: { equals: normalizedUserEmail, mode: 'insensitive' as const },
-              },
-            ]
-          : []),
-        // Pedido assistido destrancado por cookie HttpOnly
-        ...(isUnlocked ? [{ isAssistedSale: true }] : []),
-        // Administradores da loja
-        ...(user?.role === 'ADMIN' ? [{ isAssistedSale: true }] : []),
+        // Venda assistida pode ser acessada livremente pelo link sem bloqueio de conta
+        { isAssistedSale: true },
+        // Pedidos regulares do próprio comprador
+        ...(user ? [{ userId: user.id }] : []),
       ],
     },
     include: {
@@ -62,6 +44,7 @@ export default async function CheckoutOrderPage({
         select: {
           id: true,
           email: true,
+          name: true,
         },
       },
       items: {
@@ -78,11 +61,14 @@ export default async function CheckoutOrderPage({
   })
 
   if (!order) {
+    if (!user) {
+      redirect(`/login?redirect=/marketplace/checkout/${id}`)
+    }
     redirect('/marketplace')
   }
 
-  // 1. Trava de Acesso (Link Revogado): se o pedido foi cancelado, interrompe a renderização do checkout
-  if (order.logisticsStatus === 'CANCELLED' || order.cancelledAt !== null) {
+  // 1. Trava de Acesso (Link Revogado/Expirado): se o pedido foi cancelado ou expirou por timeout comercial, interrompe o checkout
+  if (order.logisticsStatus === 'CANCELLED' || order.cancelledAt !== null || isOrderExpired(order)) {
     return (
       <div className="min-h-screen bg-[#050811] text-slate-100 flex flex-col font-sans">
         <Header user={user} logoHref="/" actions={<Cart_Button />} />
@@ -126,25 +112,14 @@ export default async function CheckoutOrderPage({
     )
   }
 
-  // Regra V21: Bloqueia estritamente qualquer tentativa de outra conta assumir o pedido
-  if (order.isAssistedSale) {
+  // Se for venda assistida e o comprador logado tiver o mesmo e-mail esperado, vincula silenciosamente sem bloquear outras contas
+  if (order.isAssistedSale && user && normalizedUserEmail) {
     const expected = order.assistedSaleExpectedEmail?.trim().toLowerCase()
-
-    if (user && normalizedUserEmail) {
-      const isOwner = Boolean(expected && normalizedUserEmail === expected)
-      if (!isOwner && user.role !== 'ADMIN' && !isUnlocked) {
-        redirect('/marketplace')
-      }
-
-      // Apenas vincula se comprovadamente for o titular legítimo do e-mail esperado
-      if (isOwner && order.userId !== user.id) {
-        await prisma.order.update({
-          where: { id: order.id },
-          data: { userId: user.id },
-        })
-      }
-    } else if (!isUnlocked) {
-      redirect('/marketplace')
+    if (expected && normalizedUserEmail === expected && order.userId !== user.id) {
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { userId: user.id },
+      })
     }
   }
 
@@ -261,9 +236,28 @@ export default async function CheckoutOrderPage({
     })),
   }
 
-  const payerEmail = user?.email || order.assistedSaleExpectedEmail || ''
+  const snapshotRecipientName =
+    snapshotData && typeof snapshotData.recipientName === 'string' && snapshotData.recipientName.trim()
+      ? snapshotData.recipientName.trim()
+      : null
+
+  const snapshotExpectedEmail =
+    snapshotData && typeof snapshotData.expectedEmail === 'string' && snapshotData.expectedEmail.trim()
+      ? snapshotData.expectedEmail.trim()
+      : null
+
+  const notesClientNameMatch = order.adminNotes?.match(/\[Cliente:\s*([^\]]+)\]/)
+  const notesClientName = notesClientNameMatch?.[1]?.trim() || null
+
+  const payerEmail =
+    (order.isAssistedSale
+      ? order.assistedSaleExpectedEmail || snapshotExpectedEmail || order.user?.email || user?.email
+      : user?.email || order.user?.email) || ''
+
   const payerName =
-    user?.name || order.assistedSaleExpectedEmail?.split('@')[0] || 'Cliente'
+    (order.isAssistedSale
+      ? snapshotRecipientName || notesClientName || order.user?.name || order.assistedSaleExpectedEmail?.split('@')[0]
+      : user?.name || order.user?.name) || 'Cliente'
 
   return (
     <div className="min-h-screen bg-[#050811] text-slate-100 flex flex-col font-sans">

@@ -10,6 +10,7 @@ import {
   MessageSquarePlus,
   Boxes,
   CircleDot,
+  BarChart3,
   ExternalLink,
   UserCheck,
   AlertTriangle,
@@ -77,6 +78,11 @@ export default function Admin_Sidebar({ adminUser, counts }: AdminSidebarProps) 
       href: '/admin/filaments',
       label: 'Filamentos',
       icon: CircleDot,
+    },
+    {
+      href: '/admin/finance',
+      label: 'Controle Financeiro',
+      icon: BarChart3,
     },
   ]
 

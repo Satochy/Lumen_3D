@@ -1,11 +1,19 @@
+import { Suspense } from 'react'
 import { requireAdmin } from '@/lib/auth'
 import { getFilaments } from '@/app/actions/filaments'
 import Filaments_Client, {
   type SerializedFilament,
 } from '@/components/admin/Filaments_Client'
 
-export default async function FilamentsPage() {
+export default async function FilamentsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ action?: string }>
+}) {
   await requireAdmin()
+
+  const resolvedParams = searchParams ? await searchParams : undefined
+  const defaultOpenCreateModal = resolvedParams?.action === 'new'
 
   const result = await getFilaments()
   const rawFilaments = result.success && result.data ? result.data : []
@@ -21,5 +29,12 @@ export default async function FilamentsPage() {
     createdAt: f.createdAt.toISOString(),
   }))
 
-  return <Filaments_Client initialFilaments={serializedFilaments} />
+  return (
+    <Suspense fallback={null}>
+      <Filaments_Client
+        initialFilaments={serializedFilaments}
+        defaultOpenCreateModal={defaultOpenCreateModal}
+      />
+    </Suspense>
+  )
 }

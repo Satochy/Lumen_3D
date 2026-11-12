@@ -1,7 +1,7 @@
 'use client'
 
-import React, { useMemo, useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
+import React, { useEffect, useMemo, useState, useTransition } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import {
   CircleDot,
   Plus,
@@ -37,6 +37,7 @@ export interface SerializedFilament {
 
 interface FilamentsClientProps {
   initialFilaments: SerializedFilament[]
+  defaultOpenCreateModal?: boolean
 }
 
 type FilamentFilterKey = 'PLA' | 'ABS' | 'PETG' | 'LOW_STOCK'
@@ -47,8 +48,11 @@ const labelCls = 'block text-xs font-medium text-gray-400 mb-1.5'
 
 export default function Filaments_Client({
   initialFilaments,
+  defaultOpenCreateModal = false,
 }: FilamentsClientProps) {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const actionParam = searchParams.get('action')
   const [isPending, startTransition] = useTransition()
 
   // Estados de busca e filtros cumulativos da tela principal
@@ -64,10 +68,25 @@ export default function Filaments_Client({
   const [selectedFilamentIds, setSelectedFilamentIds] = useState<string[]>([])
 
   // Estados dos Modais de Nova Bobina e Importação de Dados
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(() =>
+    Boolean(defaultOpenCreateModal || actionParam === 'new')
+  )
   const [isImportModalOpen, setIsImportModalOpen] = useState(false)
   const [selectedImportFile, setSelectedImportFile] = useState<File | null>(null)
   const [hexPreview, setHexPreview] = useState('#22d3ee')
+
+  useEffect(() => {
+    const hasNewActionInUrl =
+      typeof window !== 'undefined' &&
+      new URLSearchParams(window.location.search).get('action') === 'new'
+
+    if (defaultOpenCreateModal || actionParam === 'new' || hasNewActionInUrl) {
+      setIsCreateModalOpen(true)
+      if (typeof window !== 'undefined' && window.location.search.includes('action=new')) {
+        window.history.replaceState(null, '', window.location.pathname)
+      }
+    }
+  }, [defaultOpenCreateModal, actionParam])
 
   // Estados de edição rápida de peso (gramas) por linha
   const [weightInputs, setWeightInputs] = useState<Record<string, string>>({})

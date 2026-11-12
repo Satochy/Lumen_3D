@@ -1,12 +1,11 @@
 'use client'
 
-import React, { useState, useTransition, useMemo } from 'react'
-import { useRouter } from 'next/navigation'
+import React, { useEffect, useState, useTransition, useMemo } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import {
   Link2,
   Copy,
   Check,
-  ExternalLink,
   Package,
   Plus,
   Trash2,
@@ -18,7 +17,7 @@ import {
   CheckCircle2,
   Clock,
   Send,
-  UserCheck,
+  User,
   FileText,
   ShoppingBag,
   X,
@@ -31,7 +30,13 @@ import {
   type CatalogProductOption,
   createAssistedSaleDraftAction,
 } from '@/app/actions/assisted_sales_actions'
+import { cancelOrderAdminAction } from '@/app/actions/order_cancellation_actions'
 import { AdminMetricsAndFilterBar } from '@/components/admin/Admin_Metrics_And_Filter_Bar'
+import Admin_Orders_Table from '@/components/admin/Admin_Orders_Table'
+import {
+  normalizeAdminOrder,
+  type NormalizedOrderPresentation,
+} from '@/lib/order_presenter'
 
 export interface SerializedAssistedOrderItem {
   id: string
@@ -47,10 +52,16 @@ export interface SerializedAssistedOrder {
   paymentStatus: 'PENDING' | 'PAID' | 'FAILED' | 'REFUNDED'
   logisticsStatus: string
   totalAmount: number
+  shippingCost?: number
+  isLocalDelivery?: boolean
+  isAssistedSale?: boolean
+  clientName?: string | null
   assistedSaleExpectedEmail: string | null
+  shippingAddressSnapshot?: Record<string, unknown> | null
   adminNotes: string | null
   createdAt: string
   paidAt: string | null
+  cancelledAt?: string | null
   checkoutUrl: string
   user: {
     id: string
@@ -65,6 +76,7 @@ export interface SerializedAssistedOrder {
 interface AssistedSalesClientProps {
   products: CatalogProductOption[]
   initialOrders?: SerializedAssistedOrder[]
+  defaultOpenCreateModal?: boolean
 }
 
 type OriginOption = 'WhatsApp' | 'Instagram' | 'Outro'
@@ -85,17 +97,42 @@ function parseOrderOrigin(notes: string | null): OriginOption {
   return 'WhatsApp'
 }
 
+// Helper para extração de nome do cliente nas notas caso não venha na prop
+function parseClientNameFromNotes(notes: string | null): string | null {
+  if (!notes) return null
+  const match = notes.match(/\[Cliente:\s*([^\]]+)\]/)
+  return match?.[1] ? match[1].trim() : null
+}
+
 export default function Assisted_Sales_Client({
   products,
   initialOrders = [],
+  defaultOpenCreateModal = false,
 }: AssistedSalesClientProps) {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const actionParam = searchParams.get('action')
 
   // Estado da listagem de pedidos
   const [orders, setOrders] = useState<SerializedAssistedOrder[]>(initialOrders)
 
   // Controle de abertura do Modal centralizado (Dialog)
-  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [isModalOpen, setIsModalOpen] = useState(() =>
+    Boolean(defaultOpenCreateModal || actionParam === 'new')
+  )
+
+  useEffect(() => {
+    const hasNewActionInUrl =
+      typeof window !== 'undefined' &&
+      new URLSearchParams(window.location.search).get('action') === 'new'
+
+    if (defaultOpenCreateModal || actionParam === 'new' || hasNewActionInUrl) {
+      setIsModalOpen(true)
+      if (typeof window !== 'undefined' && window.location.search.includes('action=new')) {
+        window.history.replaceState(null, '', window.location.pathname)
+      }
+    }
+  }, [defaultOpenCreateModal, actionParam])
 
   // Filtros da tabela
   const [searchQuery, setSearchQuery] = useState('')
@@ -111,12 +148,14 @@ export default function Assisted_Sales_Client({
   const [lastCreatedDraft, setLastCreatedDraft] = useState<{
     orderId: string
     checkoutUrl: string
+    clientName: string
     expectedEmail: string
     totalAmount: number
   } | null>(null)
   const [bannerCopied, setBannerCopied] = useState(false)
 
   // Estados do formulário dentro do Modal
+  const [clientName, setClientName] = useState('')
   const [expectedEmail, setExpectedEmail] = useState('')
   const [origin, setOrigin] = useState<OriginOption>('WhatsApp')
   const [adminNotes, setAdminNotes] = useState('')
@@ -169,22 +208,22 @@ export default function Assisted_Sales_Client({
       }
 
       if (originFilter !== 'ALL') {
-        const orderOrigin = parseOrderOrigin(order.adminNotes)
-        if (orderOrigin !== originFilter) return false
+        const normalized = normalizeAdminOrder(order)
+        const targetOrigin = originFilter === 'Outro' ? 'Balcão' : originFilter
+        if (normalized.origin !== targetOrigin) return false
       }
 
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase().trim()
-        const matchEmail = order.assistedSaleExpectedEmail?.toLowerCase().includes(query)
+        const normalized = normalizeAdminOrder(order)
+        const matchClientName = normalized.clientName.toLowerCase().includes(query)
+        const matchEmail = normalized.clientEmail.toLowerCase().includes(query)
         const matchId = order.id.toLowerCase().includes(query)
-        const matchUser =
-          order.user?.name?.toLowerCase().includes(query) ||
-          order.user?.username?.toLowerCase().includes(query)
         const matchItem = order.items.some((item) =>
           item.productTitle.toLowerCase().includes(query)
         )
 
-        if (!matchEmail && !matchId && !matchUser && !matchItem) {
+        if (!matchClientName && !matchEmail && !matchId && !matchItem) {
           return false
         }
       }
@@ -285,6 +324,11 @@ export default function Assisted_Sales_Client({
     e.preventDefault()
     setFormErrorMsg(null)
 
+    if (!clientName.trim()) {
+      setFormErrorMsg('Informe o nome do cliente.')
+      return
+    }
+
     if (!expectedEmail.trim()) {
       setFormErrorMsg('Informe o e-mail esperado do destinatário do link.')
       return
@@ -314,7 +358,9 @@ export default function Assisted_Sales_Client({
 
     startTransition(async () => {
       try {
+        const trimmedClientName = clientName.trim()
         const payload = {
+          clientName: trimmedClientName,
           expectedEmail: expectedEmail.trim().toLowerCase(),
           origin,
           adminNotes: adminNotes.trim() || null,
@@ -333,8 +379,9 @@ export default function Assisted_Sales_Client({
             paymentStatus: 'PENDING',
             logisticsStatus: 'PREPARING',
             totalAmount: subtotal,
+            clientName: trimmedClientName,
             assistedSaleExpectedEmail: expectedEmail.trim().toLowerCase(),
-            adminNotes: `[Origem: ${origin}] - ${adminNotes.trim() || 'Rascunho de venda assistida'}`,
+            adminNotes: `[Cliente: ${trimmedClientName}] [Origem: ${origin}] - ${adminNotes.trim() || 'Rascunho de venda assistida'}`,
             createdAt: new Date().toISOString(),
             paidAt: null,
             checkoutUrl: res.checkoutUrl,
@@ -356,11 +403,13 @@ export default function Assisted_Sales_Client({
           setLastCreatedDraft({
             orderId: res.orderId,
             checkoutUrl: res.checkoutUrl,
+            clientName: trimmedClientName,
             expectedEmail: expectedEmail.trim().toLowerCase(),
             totalAmount: subtotal,
           })
 
           // Limpa formulário e fecha o modal
+          setClientName('')
           setExpectedEmail('')
           setAdminNotes('')
           setItems([])
@@ -379,10 +428,42 @@ export default function Assisted_Sales_Client({
   }
 
   // Copiar link de pedido da tabela
-  const handleCopyLink = (order: SerializedAssistedOrder) => {
+  const handleCopyLink = (order: NormalizedOrderPresentation) => {
     navigator.clipboard.writeText(order.checkoutUrl)
     setCopiedOrderId(order.id)
     setTimeout(() => setCopiedOrderId(null), 2500)
+  }
+
+  // Revogar / Cancelar orçamento pendente
+  const handleRevokeOrder = (orderId: string) => {
+    const shortId = orderId.slice(-6).toUpperCase()
+    const reason = window.prompt(
+      `Informe o motivo para revogar/cancelar o orçamento #${shortId}:`
+    )
+    if (reason === null) return
+    const trimmed = reason.trim()
+    if (!trimmed) return
+
+    startTransition(async () => {
+      const res = await cancelOrderAdminAction(orderId, trimmed)
+      if (res.success) {
+        setOrders((prev) =>
+          prev.map((o) =>
+            o.id === orderId
+              ? {
+                  ...o,
+                  logisticsStatus: 'CANCELLED',
+                  cancelledAt: res.cancelledAt || new Date().toISOString(),
+                  adminNotes: res.adminNotes ?? o.adminNotes,
+                }
+              : o
+          )
+        )
+        router.refresh()
+      } else {
+        alert(res.error || 'Falha ao cancelar orçamento.')
+      }
+    })
   }
 
   // Copiar link do banner de sucesso
@@ -391,16 +472,6 @@ export default function Assisted_Sales_Client({
     navigator.clipboard.writeText(lastCreatedDraft.checkoutUrl)
     setBannerCopied(true)
     setTimeout(() => setBannerCopied(false), 2500)
-  }
-
-  // Gerar link formatado do WhatsApp
-  const getWhatsAppShareUrl = (order: SerializedAssistedOrder) => {
-    const text =
-      `Olá! Seu pedido personalizado na Lúmen 3D já está pronto para pagamento.\n\n` +
-      `📦 Total: ${formatCurrency(order.totalAmount)}\n` +
-      `🔗 Acesse o link seguro para concluir seu pedido:\n` +
-      `${order.checkoutUrl}`
-    return `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`
   }
 
   return (
@@ -436,7 +507,7 @@ export default function Assisted_Sales_Client({
               <span className="text-cyan-300 font-bold">Link Gerado com Sucesso: </span>
               <span className="text-slate-200">
                 Pedido #{lastCreatedDraft.orderId.slice(-6).toUpperCase()} &bull;{' '}
-                {lastCreatedDraft.expectedEmail} &bull;{' '}
+                <strong>{lastCreatedDraft.clientName}</strong> ({lastCreatedDraft.expectedEmail}) &bull;{' '}
                 <strong className="text-emerald-400 font-mono">
                   {formatCurrency(lastCreatedDraft.totalAmount)}
                 </strong>
@@ -523,7 +594,7 @@ export default function Assisted_Sales_Client({
         ]}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
-        searchPlaceholder="Buscar por e-mail, ID ou nome da peça..."
+        searchPlaceholder="Buscar por cliente, e-mail, ID ou peça..."
         activeFilter={statusFilter}
         onFilterChange={setStatusFilter}
         filters={[
@@ -575,212 +646,17 @@ export default function Assisted_Sales_Client({
         }
       />
 
-      {/* 4. TABELA DE GERENCIAMENTO (ORDER LIST) */}
-      <div className="space-y-3">
-
-        {/* Tabela de Gerenciamento Mestre */}
-        <div className="rounded-2xl border border-slate-800/80 bg-[#080d1e]/90 shadow-2xl overflow-hidden backdrop-blur-sm">
-          {filteredOrders.length === 0 ? (
-            <div className="p-10 text-center text-slate-400 space-y-2">
-              <ShoppingBag className="w-8 h-8 text-slate-400 mx-auto" />
-              <p className="text-xs font-semibold text-slate-300">
-                Nenhum rascunho de venda assistida encontrado nesta visualização.
-              </p>
-              <p className="text-[11px] text-slate-400">
-                Alterne os filtros ou clique em &quot;+ Nova Venda Assistida&quot; acima para emitir um link.
-              </p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-800/80 bg-slate-950/70 text-[10px] font-mono uppercase tracking-wider text-slate-400">
-                    <th className="py-3 px-4">ID do Rascunho</th>
-                    <th className="py-3 px-4">E-mail Esperado</th>
-                    <th className="py-3 px-4">Origem</th>
-                    <th className="py-3 px-4">Total (R$)</th>
-                    <th className="py-3 px-4">Status do Pagamento</th>
-                    <th className="py-3 px-4 text-right">Ação</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/50 text-xs">
-                  {filteredOrders.map((order) => {
-                    const orderOrigin = parseOrderOrigin(order.adminNotes)
-                    const isPaid = order.paymentStatus === 'PAID'
-                    const isCancelled = order.logisticsStatus === 'CANCELLED'
-                    const isCopied = copiedOrderId === order.id
-                    const totalItems = order.items.reduce((acc, i) => acc + i.quantity, 0)
-                    const formattedDate = new Date(order.createdAt).toLocaleDateString('pt-BR', {
-                      day: '2-digit',
-                      month: 'short',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })
-
-                    return (
-                      <tr
-                        key={order.id}
-                        className="hover:bg-slate-900/50 transition-colors duration-150"
-                      >
-                        {/* 1. ID do Rascunho */}
-                        <td className="py-3 px-4 font-mono">
-                          <div className="flex flex-col">
-                            <span className="font-bold text-slate-100">
-                              #{order.id.slice(-6).toUpperCase()}
-                            </span>
-                            <span className="text-[10px] text-slate-400">{formattedDate}</span>
-                          </div>
-                        </td>
-
-                        {/* 2. E-mail Esperado */}
-                        <td className="py-3 px-4">
-                          <div className="min-w-0 max-w-[200px] sm:max-w-[260px]">
-                            <div className="flex items-center gap-1.5 text-slate-200 font-medium truncate">
-                              <Mail className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-                              <span className="truncate">
-                                {order.assistedSaleExpectedEmail || 'Não informado'}
-                              </span>
-                            </div>
-
-                            {order.user && (
-                              <div className="flex items-center gap-1 text-[10px] text-emerald-400 font-semibold truncate mt-0.5">
-                                <UserCheck className="w-3.5 h-3.5 shrink-0" />
-                                <span className="truncate">
-                                  Vinculado: {order.user.name || order.user.username}
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* 3. Origem */}
-                        <td className="py-3 px-4">
-                          {orderOrigin === 'WhatsApp' ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-950/60 text-emerald-300 border border-emerald-800/40">
-                              <Share2 className="w-3 h-3 text-emerald-400" />
-                              <span>WhatsApp</span>
-                            </span>
-                          ) : orderOrigin === 'Instagram' ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-fuchsia-950/60 text-fuchsia-300 border border-fuchsia-800/40">
-                              <Share2 className="w-3 h-3 text-fuchsia-400" />
-                              <span>Instagram</span>
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-slate-900 text-slate-300 border border-slate-700/50">
-                              <ShoppingBag className="w-3 h-3 text-slate-400" />
-                              <span>Balcão</span>
-                            </span>
-                          )}
-                        </td>
-
-                        {/* 4. Total (R$) */}
-                        <td className="py-3 px-4 font-mono">
-                          <div className="flex flex-col">
-                            <span className="font-bold text-slate-100">
-                              {formatCurrency(order.totalAmount)}
-                            </span>
-                            <span className="text-[10px] text-slate-400">
-                              {totalItems} {totalItems === 1 ? 'peça' : 'peças'}
-                            </span>
-                          </div>
-                        </td>
-
-                        {/* 5. Status do Pagamento (Badge CANCELLED / PAID / PENDING) */}
-                        <td className="py-3 px-4">
-                          {isCancelled ? (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-rose-500/15 text-rose-300 border border-rose-500/30">
-                              <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
-                              <span>Cancelado</span>
-                            </span>
-                          ) : isPaid ? (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
-                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                              <span>Pago</span>
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-500/10 text-amber-300 border border-amber-500/30">
-                              <span className="relative flex h-2 w-2">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
-                                <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
-                              </span>
-                              <span>Aguardando</span>
-                            </span>
-                          )}
-                        </td>
-
-                        {/* 6. Ação: Copiar Link (quando PENDING e não CANCELLED) */}
-                        <td className="py-3 px-4 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            {isCancelled ? (
-                              <button
-                                type="button"
-                                disabled
-                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-900 text-slate-500 border border-slate-800 font-bold text-[11px] uppercase tracking-wider opacity-60 cursor-not-allowed"
-                                title="Link revogado: pedido cancelado"
-                              >
-                                <Copy className="w-3 h-3" />
-                                <span>Revogado</span>
-                              </button>
-                            ) : !isPaid ? (
-                              <button
-                                type="button"
-                                onClick={() => handleCopyLink(order)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-[11px] uppercase tracking-wider transition cursor-pointer shadow-md"
-                                title="Copiar link de checkout do rascunho"
-                              >
-                                {isCopied ? (
-                                  <>
-                                    <Check className="w-3 h-3 text-emerald-300" />
-                                    <span>Copiado!</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Copy className="w-3 h-3" />
-                                    <span>Copiar Link</span>
-                                  </>
-                                )}
-                              </button>
-                            ) : (
-                              <span className="text-[11px] font-mono text-emerald-400 font-bold px-2 py-0.5 rounded bg-emerald-950/40 border border-emerald-800/40">
-                                Convertido
-                              </span>
-                            )}
-
-                            {/* WhatsApp e Checkout (somente quando não cancelado) */}
-                            {!isCancelled && (
-                              <>
-                                <a
-                                  href={getWhatsAppShareUrl(order)}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="p-1.5 rounded-lg bg-emerald-900/60 hover:bg-emerald-800 text-emerald-300 hover:text-white border border-emerald-800/50 transition"
-                                  title="Enviar no WhatsApp"
-                                >
-                                  <Send className="w-3 h-3" />
-                                </a>
-
-                                <a
-                                  href={order.checkoutUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 transition"
-                                  title="Abrir página de checkout"
-                                >
-                                  <ExternalLink className="w-3 h-3" />
-                                </a>
-                              </>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </div>
+      {/* 4. TABELA DE GERENCIAMENTO UNIFICADA */}
+      <Admin_Orders_Table
+        orders={filteredOrders}
+        mode="assisted"
+        isPending={isPending}
+        onCopyLink={handleCopyLink}
+        copiedOrderId={copiedOrderId}
+        onCancelOrder={handleRevokeOrder}
+        emptyTitle="Nenhum rascunho de venda assistida encontrado nesta visualização."
+        emptySubtitle='Alterne os filtros ou clique em "+ Nova Venda Assistida" acima para emitir um link.'
+      />
 
       {/* 5. MODAL CENTRALIZADO (DIALOG) PARA CRIAÇÃO DE RASCUNHO */}
       {isModalOpen && (
@@ -830,9 +706,25 @@ export default function Assisted_Sales_Client({
                   </div>
                 )}
 
-                {/* E-mail e Origem */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="sm:col-span-2 space-y-1">
+                {/* Nome do Cliente, E-mail e Origem */}
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                  <div className="sm:col-span-4 space-y-1">
+                    <label className="text-xs font-semibold text-slate-300 flex items-center gap-1">
+                      <User className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>Nome do Cliente *</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={clientName}
+                      onChange={(e) => setClientName(e.target.value)}
+                      placeholder="Ex: João Silva"
+                      aria-label="Nome do Cliente"
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-cyan-500"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-5 space-y-1">
                     <label className="text-xs font-semibold text-slate-300 flex items-center gap-1">
                       <Mail className="w-3.5 h-3.5 text-cyan-400" />
                       <span>E-mail do Cliente *</span>
@@ -848,7 +740,7 @@ export default function Assisted_Sales_Client({
                     />
                   </div>
 
-                  <div className="space-y-1">
+                  <div className="sm:col-span-3 space-y-1">
                     <label className="text-xs font-semibold text-slate-300 flex items-center gap-1">
                       <Share2 className="w-3.5 h-3.5 text-cyan-400" />
                       <span>Canal</span>

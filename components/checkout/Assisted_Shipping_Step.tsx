@@ -1,7 +1,6 @@
 'use client'
 
 import React, { useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
 import {
   MapPin,
   Truck,
@@ -17,6 +16,7 @@ import {
   saveAssistedOrderShippingAction,
 } from '@/app/actions/assisted_sales_actions'
 import type { ShippingOption } from '@/app/actions/shipping_actions'
+import { isValidCPF, formatCPF } from '@/lib/shipping/shipping_utils'
 
 interface AssistedShippingStepProps {
   orderId: string
@@ -35,17 +35,21 @@ export default function Assisted_Shipping_Step({
   itemsSummary,
   defaultEmail,
 }: AssistedShippingStepProps) {
-  const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
   // Estados do formulário de endereço
   const [zipCode, setZipCode] = useState('')
+  const [cpf, setCpf] = useState('')
   const [street, setStreet] = useState('')
   const [number, setNumber] = useState('')
   const [complement, setComplement] = useState('')
   const [neighborhood, setNeighborhood] = useState('')
   const [city, setCity] = useState('')
   const [state, setState] = useState('')
+
+  const handleCpfChange = (value: string) => {
+    setCpf(formatCPF(value))
+  }
 
   // Estados de frete
   const [shippingOptions, setShippingOptions] = useState<ShippingOption[]>([])
@@ -112,6 +116,11 @@ export default function Assisted_Shipping_Step({
       return
     }
 
+    if (!cpf.trim() || !isValidCPF(cpf)) {
+      setErrorMessage('Por favor, informe um CPF válido para a emissão do frete.')
+      return
+    }
+
     if (!street.trim() || !number.trim() || !neighborhood.trim() || !city.trim() || !state.trim()) {
       setErrorMessage('Preencha todos os campos obrigatórios do endereço de entrega.')
       return
@@ -129,6 +138,7 @@ export default function Assisted_Shipping_Step({
             city: city.trim(),
             state: state.trim().toUpperCase(),
             zipCode,
+            cpf: cpf.trim(),
           },
           selectedShippingOption: {
             serviceId: selectedOption.serviceId,
@@ -183,28 +193,52 @@ export default function Assisted_Shipping_Step({
         )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
-          {/* CEP com consulta */}
-          <div className="space-y-1.5 max-w-xs">
-            <label htmlFor="cep" className="block text-xs font-semibold text-slate-300">
-              CEP de Entrega <span className="text-cyan-400">*</span>
-            </label>
-            <div className="relative">
+          {/* Identificação de Entrega: CEP e CPF */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* CEP com consulta */}
+            <div className="space-y-1.5">
+              <label htmlFor="cep" className="block text-xs font-semibold text-slate-300">
+                CEP de Entrega <span className="text-cyan-400">*</span>
+              </label>
+              <div className="relative">
+                <input
+                  id="cep"
+                  type="text"
+                  required
+                  maxLength={9}
+                  value={zipCode}
+                  onChange={(e) => handleCepChange(e.target.value)}
+                  placeholder="00000-000"
+                  disabled={isPending}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950/80 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition font-mono"
+                />
+                {isLoadingShipping && (
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    <Loader2 className="w-4 h-4 text-cyan-400 animate-spin" />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* CPF do Destinatário */}
+            <div className="space-y-1.5">
+              <label htmlFor="cpf" className="block text-xs font-semibold text-slate-300">
+                CPF do Destinatário <span className="text-cyan-400">*</span>
+              </label>
               <input
-                id="cep"
+                id="cpf"
                 type="text"
                 required
-                maxLength={9}
-                value={zipCode}
-                onChange={(e) => handleCepChange(e.target.value)}
-                placeholder="00000-000"
+                maxLength={14}
+                value={cpf}
+                onChange={(e) => handleCpfChange(e.target.value)}
+                placeholder="000.000.000-00"
                 disabled={isPending}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950/80 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950/80 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition font-mono"
               />
-              {isLoadingShipping && (
-                <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                  <Loader2 className="w-4 h-4 text-cyan-400 animate-spin" />
-                </div>
-              )}
+              <p className="text-[10px] text-slate-500">
+                Obrigatório para emissão de frete e declaração de conteúdo.
+              </p>
             </div>
           </div>
 

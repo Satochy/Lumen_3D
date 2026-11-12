@@ -6,6 +6,7 @@ import { requireAdmin } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { LogisticsStatus, StockMovementType, OrderOccurrenceStatus, Prisma } from '@prisma/client'
 import { revalidatePath } from 'next/cache'
+import { isOrderFinalized } from '@/lib/order_presenter'
 
 function getErrorMessage(err: unknown, fallback: string): string {
   if (err instanceof Error) return err.message
@@ -111,6 +112,8 @@ async function setOrderLogisticsStatus(
       id: true,
       paymentStatus: true,
       logisticsStatus: true,
+      deliveredAt: true,
+      adminNotes: true,
       items: {
         select: {
           id: true,
@@ -130,6 +133,11 @@ async function setOrderLogisticsStatus(
 
   if (!existingOrder) {
     return
+  }
+
+  // Trava de Imutabilidade: Pedidos Finalizados nunca podem ter status alterado
+  if (isOrderFinalized(existingOrder)) {
+    throw new Error('Pedidos finalizados são imutáveis e não podem ter seu status alterado.')
   }
 
   const allowedWhenUnpaid: LogisticsStatus[] = ['PREPARING', 'CANCELLED']
@@ -284,6 +292,20 @@ export async function toggleOrderItemReadyAction(
         item.order.paymentStatus === 'PAID' &&
         ['PREPARING', 'PRODUCING', 'PRINTING', 'POST_PROCESSING'].includes(item.order.logisticsStatus)
       ) {
+        // Marca itens de pronta entrega como prontos se não estiverem
+        await prisma.orderItem.updateMany({
+          where: {
+            orderId: item.orderId,
+            isMadeToOrder: false,
+            productionStatus: { not: 'READY' },
+          },
+          data: {
+            productionStatus: 'READY',
+            readyAt: new Date(),
+            readyByUserId: admin.id,
+          },
+        })
+
         await prisma.order.update({
           where: { id: item.orderId },
           data: {
@@ -416,5 +438,232 @@ export async function resolveOrderOccurrenceAction(
   } catch (err: unknown) {
     console.error('Erro ao resolver ocorrência:', err)
     return { success: false, error: getErrorMessage(err, 'Falha ao resolver ocorrência.') }
+  }
+}
+
+/**
+ * Despacha operacionalmente um pedido Pronto para Envio (READY_FOR_SHIPPING -> SHIPPED).
+ * Atualiza status, grava timestamp de envio e notas de auditoria.
+ */
+export async function dispatchOrderAction(
+  orderId: string,
+  trackingCode?: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const admin = await requireAdmin()
+
+    if (!orderId || typeof orderId !== 'string') {
+      return { success: false, error: 'ID do pedido inválido.' }
+    }
+
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: {
+        id: true,
+        paymentStatus: true,
+        logisticsStatus: true,
+        isLocalDelivery: true,
+        trackingCode: true,
+        adminNotes: true,
+        shippingAddressSnapshot: true,
+      },
+    })
+
+    if (!order) {
+      return { success: false, error: 'Pedido não encontrado.' }
+    }
+
+    if (order.logisticsStatus !== 'READY_FOR_SHIPPING') {
+      return {
+        success: false,
+        error: `Apenas pedidos "Pronto p/ Envio" podem ser despachados. Status atual: ${order.logisticsStatus}.`,
+      }
+    }
+
+    const snapshot = order.shippingAddressSnapshot as Record<string, unknown> | null
+    const isLocal = Boolean(
+      order.isLocalDelivery ||
+      snapshot?.isLocalDelivery ||
+      (typeof snapshot?.serviceName === 'string' &&
+        snapshot.serviceName.toLowerCase().includes('local'))
+    )
+
+    const now = new Date()
+    const cleanTracking = trackingCode?.trim().toUpperCase() || order.trackingCode || null
+    const adminName = admin.name || admin.username || admin.email
+    const dispatchNote = isLocal
+      ? `[Saída / Despacho por Frota Própria confirmado por ${adminName} em ${now.toLocaleString('pt-BR')}]`
+      : `[Despachado / Enviado via transportadora por ${adminName} em ${now.toLocaleString('pt-BR')}${cleanTracking ? ` — Rastreio: ${cleanTracking}` : ''}]`
+
+    const updatedNotes = order.adminNotes
+      ? `${order.adminNotes}\n${dispatchNote}`
+      : dispatchNote
+
+    await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        logisticsStatus: 'SHIPPED',
+        shippedAt: now,
+        trackingCode: cleanTracking,
+        adminNotes: updatedNotes,
+      },
+    })
+
+    revalidatePath('/admin/orders')
+    revalidatePath('/admin')
+    revalidatePath('/profile/orders')
+
+    return { success: true }
+  } catch (err: unknown) {
+    console.error('Erro ao despachar pedido:', err)
+    return {
+      success: false,
+      error: getErrorMessage(err, 'Falha ao despachar pedido.'),
+    }
+  }
+}
+
+/**
+ * Confirma a entrega física final de um pedido de Entrega Local ou Balcão ao destinatário.
+ * Avança o status de SHIPPED -> DELIVERED, grava deliveredAt e inicia o prazo de 3 dias para finalização.
+ */
+export async function confirmLocalDeliveryAction(
+  orderId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const admin = await requireAdmin()
+
+    if (!orderId || typeof orderId !== 'string') {
+      return { success: false, error: 'ID do pedido inválido.' }
+    }
+
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: {
+        id: true,
+        paymentStatus: true,
+        logisticsStatus: true,
+        deliveredAt: true,
+        adminNotes: true,
+      },
+    })
+
+    if (!order) {
+      return { success: false, error: 'Pedido não encontrado.' }
+    }
+
+    if (order.logisticsStatus !== 'SHIPPED') {
+      return {
+        success: false,
+        error: `Apenas pedidos com status "Enviado / A Caminho" podem ser confirmados como entregues (status atual: ${order.logisticsStatus}).`,
+      }
+    }
+
+    const now = new Date()
+    const adminName = admin.name || admin.username || admin.email
+    const deliveryNote = `[Entrega Local / Balcão confirmada por ${adminName} em ${now.toLocaleString('pt-BR')}]`
+    const updatedNotes = order.adminNotes
+      ? `${order.adminNotes}\n${deliveryNote}`
+      : deliveryNote
+
+    await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        logisticsStatus: 'DELIVERED',
+        deliveredAt: now,
+        adminNotes: updatedNotes,
+      },
+    })
+
+    revalidatePath('/admin/orders')
+    revalidatePath('/admin')
+    revalidatePath('/admin/finance')
+    revalidatePath('/profile/orders')
+
+    return { success: true }
+  } catch (err: unknown) {
+    console.error('Erro ao confirmar entrega ao cliente:', err)
+    return {
+      success: false,
+      error: getErrorMessage(err, 'Falha ao confirmar entrega ao cliente.'),
+    }
+  }
+}
+
+/**
+ * Finaliza manualmente o pedido pelo Administrador, sem aguardar o prazo de 3 dias pós-entrega.
+ * - Garante logisticsStatus: 'DELIVERED'.
+ * - Registra a tag [FINALIZADO: Concluído manualmente pela administração por {admin} em {data/hora}] em adminNotes.
+ * - Retroage deliveredAt em 4 dias caso seja recente ou nulo, forçando encerramento imediato seguro.
+ * - Dispara revalidação das páginas do painel e do cliente.
+ */
+export async function finalizeOrderAdminAction(
+  orderId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const admin = await requireAdmin()
+
+    if (!orderId || typeof orderId !== 'string') {
+      return { success: false, error: 'ID do pedido inválido.' }
+    }
+
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: {
+        id: true,
+        paymentStatus: true,
+        logisticsStatus: true,
+        deliveredAt: true,
+        adminNotes: true,
+      },
+    })
+
+    if (!order) {
+      return { success: false, error: 'Pedido não encontrado.' }
+    }
+
+    if (order.logisticsStatus === 'CANCELLED') {
+      return { success: false, error: 'Pedidos cancelados não podem ser finalizados.' }
+    }
+
+    if (isOrderFinalized(order)) {
+      return { success: false, error: 'Este pedido já está finalizado.' }
+    }
+
+    const now = new Date()
+    const adminName = admin.name || admin.username || admin.email
+    const finalNote = `[FINALIZADO: Concluído manualmente pela administração por ${adminName} em ${now.toLocaleString('pt-BR')}]`
+    const updatedNotes = order.adminNotes
+      ? `${order.adminNotes}\n${finalNote}`
+      : finalNote
+
+    // Retroage deliveredAt para 4 dias atrás se recente ou nulo para garantir conclusão imediata
+    const fourDaysAgo = new Date(Date.now() - 4 * 24 * 60 * 60 * 1000)
+    const effectiveDeliveredAt =
+      order.deliveredAt && order.deliveredAt < fourDaysAgo
+        ? order.deliveredAt
+        : fourDaysAgo
+
+    await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        logisticsStatus: 'DELIVERED',
+        deliveredAt: effectiveDeliveredAt,
+        adminNotes: updatedNotes,
+      },
+    })
+
+    revalidatePath('/admin/orders')
+    revalidatePath('/admin')
+    revalidatePath('/admin/finance')
+    revalidatePath('/profile/orders')
+
+    return { success: true }
+  } catch (err: unknown) {
+    console.error('Erro ao finalizar pedido pelo admin:', err)
+    return {
+      success: false,
+      error: getErrorMessage(err, 'Falha ao finalizar o pedido.'),
+    }
   }
 }

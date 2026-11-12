@@ -12,8 +12,8 @@ export interface AdminHeaderProps {
 const routeTitles: Record<string, { title: string; subtitle: string; category: string }> = {
   '/admin': {
     category: 'Visão Geral',
-    title: 'Dashboard',
-    subtitle: 'Métricas em tempo real da oficina e das vendas Lúmen 3D',
+    title: 'Dashboard Geral',
+    subtitle: 'Métricas em tempo real da oficina, vendas e caixa. Atalhos e ações rápidas',
   },
   '/admin/orders': {
     category: 'Vendas & Expedição',
@@ -28,7 +28,7 @@ const routeTitles: Record<string, { title: string; subtitle: string; category: s
   '/admin/assisted-sales': {
     category: 'Atendimento',
     title: 'Venda Assistida',
-    subtitle: 'Geração de links de pagamento para atendimentos WhatsApp e Instagram',
+    subtitle: 'Geração de links de pagamento para atendimentos WhatsApp, Instagram e outros...',
   },
   '/admin/products': {
     category: 'Catálogo',
@@ -37,13 +37,24 @@ const routeTitles: Record<string, { title: string; subtitle: string; category: s
   },
   '/admin/filaments': {
     category: 'Insumos',
-    title: 'Filamentos',
+    title: 'Gerenciar Filamentos',
     subtitle: 'Controle de pesagem e abastecimento de carretéis',
+  },
+  '/admin/finance': {
+    category: 'Caixa & Finanças',
+    title: 'Controle Financeiro',
+    subtitle: 'Controle de caixa, inteligência de vendas, origens de receita e exportação contábil',
   },
 }
 
 export default function Admin_Header({ title, subtitle }: AdminHeaderProps) {
   const pathname = usePathname()
+
+  // Evita cabeçalho duplicado caso a página renderize <Admin_Header title="..." /> dentro do AdminLayout
+  if ((title || subtitle) && routeTitles[pathname]) {
+    return null
+  }
+
   const currentRoute = routeTitles[pathname] || {
     category: 'Console',
     title: title || 'Painel Administrativo',

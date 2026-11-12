@@ -1,4 +1,11 @@
-import { Prisma, OrderOccurrenceType, PaymentAttemptStatus, WebhookProcessingStatus, StockMovementType } from '@prisma/client'
+import {
+  Prisma,
+  LogisticsStatus,
+  OrderOccurrenceType,
+  PaymentAttemptStatus,
+  WebhookProcessingStatus,
+  StockMovementType,
+} from '@prisma/client'
 import { MercadoPagoConfig, Payment } from 'mercadopago'
 import { prisma } from '@/lib/prisma'
 import { confirmReservationAtomically } from '@/lib/stock/reservation_service'
@@ -186,6 +193,13 @@ export async function confirmApprovedPaymentInDb(params: {
       Boolean(item.isMadeToOrder || isMadeToOrderProduct(item.product))
     )
 
+    // Bifurcação automática pós-pagamento:
+    // - Pedido 100% Pronta Entrega: avança direto para READY_FOR_SHIPPING ("Pronto p/ Envio")
+    // - Pedido 100% Sob Encomenda ou Híbrido: inicia em PREPARING ("Na Fila" ou "Aguardando Produção")
+    const targetLogisticsStatus = hasMadeToOrderItem
+      ? LogisticsStatus.PREPARING
+      : LogisticsStatus.READY_FOR_SHIPPING
+
     // 4. Atualizar Order para PAID com trava atômica: paymentStatus: { not: 'PAID' }
     const result = await tx.order.updateMany({
       where: {
@@ -197,9 +211,7 @@ export async function confirmApprovedPaymentInDb(params: {
         paymentStatus: 'PAID',
         paidAt: new Date(),
         externalPaymentId: cleanPaymentId,
-        ...(!hasMadeToOrderItem && order.logisticsStatus === 'PREPARING'
-          ? { logisticsStatus: 'READY_FOR_SHIPPING' }
-          : {}),
+        logisticsStatus: targetLogisticsStatus,
       },
     })
 

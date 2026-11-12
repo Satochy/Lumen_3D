@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import { requireAdmin } from '@/lib/auth'
 import { getOrders } from '@/app/actions/orders'
 import Orders_Manager_Client, {
@@ -8,12 +9,14 @@ import Orders_Manager_Client, {
 export default async function AdminOrdersPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ tab?: string }>
+  searchParams?: Promise<{ tab?: string; search?: string; expand?: string }>
 }) {
   await requireAdmin()
 
   const resolvedParams = searchParams ? await searchParams : undefined
   const defaultTab = resolvedParams?.tab || 'todos'
+  const defaultSearch = resolvedParams?.search || ''
+  const defaultExpand = resolvedParams?.expand || ''
 
   const result = await getOrders()
   const rawOrders = result.success && result.data ? result.data : []
@@ -31,6 +34,7 @@ export default async function AdminOrdersPage({
     externalShipmentId: o.externalShipmentId ?? null,
     isLocalDelivery: o.isLocalDelivery,
     isAssistedSale: o.isAssistedSale,
+    assistedSaleExpectedEmail: o.assistedSaleExpectedEmail,
     adminNotes: o.adminNotes,
     externalPaymentId: o.externalPaymentId,
     paymentMethod: o.paymentMethod,
@@ -71,5 +75,14 @@ export default async function AdminOrdersPage({
     })),
   }))
 
-  return <Orders_Manager_Client initialOrders={serializedOrders} defaultTab={defaultTab} />
+  return (
+    <Suspense fallback={null}>
+      <Orders_Manager_Client
+        initialOrders={serializedOrders}
+        defaultTab={defaultTab}
+        defaultSearch={defaultSearch}
+        defaultExpand={defaultExpand}
+      />
+    </Suspense>
+  )
 }

@@ -6,6 +6,7 @@ import { StockMovementType } from '@prisma/client'
 import { requireAdmin } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { releaseReservationAtomically } from '@/lib/stock/reservation_service'
+import { isOrderFinalized } from '@/lib/order_presenter'
 
 export interface CancelOrderAdminResponse {
   success: boolean
@@ -74,10 +75,10 @@ export async function cancelOrderAdminAction(
       }
     }
 
-    if (existingOrder.logisticsStatus === 'DELIVERED') {
+    if (isOrderFinalized(existingOrder)) {
       return {
         success: false,
-        error: 'Pedidos já entregues não podem ser cancelados por esta ação.',
+        error: 'Pedidos finalizados são imutáveis e não podem ser cancelados.',
       }
     }
 

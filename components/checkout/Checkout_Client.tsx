@@ -32,6 +32,8 @@ export interface ShippingSnapshotData {
   city?: string
   state?: string
   zipCode?: string
+  cpf?: string | null
+  recipientName?: string | null
   serviceId?: string
   serviceName?: string
   isLocalDelivery?: boolean

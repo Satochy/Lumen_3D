@@ -47,3 +47,49 @@ export function isLocalShippingRegion(cep: string): boolean {
   // Faixa de CEPs da Região de Itapetininga/SW Paulista (18200-000 a 18285-999)
   return cepNum >= 18200000 && cepNum <= 18285999
 }
+
+/**
+ * Sanitiza o CPF mantendo apenas os dígitos numéricos
+ */
+export function sanitizeCPF(cpf: string): string {
+  return cpf.replace(/\D/g, '')
+}
+
+/**
+ * Valida o CPF através do algoritmo oficial dos dígitos verificadores
+ * Rejeita dígitos repetidos (ex: 000.000.000-00) e sequências inválidas
+ */
+export function isValidCPF(cpf: string): boolean {
+  const clean = sanitizeCPF(cpf)
+  if (clean.length !== 11) return false
+  if (/^(\d)\1{10}$/.test(clean)) return false
+
+  let sum = 0
+  for (let i = 1; i <= 9; i++) {
+    sum += parseInt(clean.substring(i - 1, i), 10) * (11 - i)
+  }
+  let remainder = (sum * 10) % 11
+  if (remainder === 10 || remainder === 11) remainder = 0
+  if (remainder !== parseInt(clean.substring(9, 10), 10)) return false
+
+  sum = 0
+  for (let i = 1; i <= 10; i++) {
+    sum += parseInt(clean.substring(i - 1, i), 10) * (12 - i)
+  }
+  remainder = (sum * 10) % 11
+  if (remainder === 10 || remainder === 11) remainder = 0
+  if (remainder !== parseInt(clean.substring(10, 11), 10)) return false
+
+  return true
+}
+
+/**
+ * Formata o CPF no padrão brasileiro (000.000.000-00)
+ */
+export function formatCPF(cpf: string): string {
+  const clean = sanitizeCPF(cpf).slice(0, 11)
+  if (clean.length <= 3) return clean
+  if (clean.length <= 6) return `${clean.slice(0, 3)}.${clean.slice(3)}`
+  if (clean.length <= 9) return `${clean.slice(0, 3)}.${clean.slice(3, 6)}.${clean.slice(6)}`
+  return `${clean.slice(0, 3)}.${clean.slice(3, 6)}.${clean.slice(6, 9)}-${clean.slice(9, 11)}`
+}

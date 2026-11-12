@@ -10,7 +10,13 @@ import { getCurrentUser } from '@/lib/auth'
 import { confirmApprovedPaymentInDb } from '@/lib/mercadopago_sync'
 import { getReservationTtlMinutes, reserveStockAtomically } from '@/lib/stock/reservation_service'
 import { calculateShippingAction, type ShippingOption } from './shipping_actions'
-import { isLocalShippingRegion, isValidCEP, sanitizeCEP } from '@/lib/shipping/shipping_utils'
+import {
+  isLocalShippingRegion,
+  isValidCEP,
+  isValidCPF,
+  sanitizeCEP,
+  sanitizeCPF,
+} from '@/lib/shipping/shipping_utils'
 
 /** Dados de cada item enviados pelo cliente (preço e título do cliente são ignorados no servidor) */
 export interface OrderItemInput {
@@ -41,6 +47,7 @@ export interface ShippingAddressInput {
   city: string
   state: string
   zipCode: string
+  cpf?: string | null
 }
 
 /** Payload da ação */
@@ -92,6 +99,14 @@ const shippingAddressSchema = z.object({
     .string()
     .transform((v) => sanitizeCEP(v))
     .refine((v) => isValidCEP(v), 'O CEP de entrega deve conter 8 dígitos.'),
+  cpf: z
+    .string()
+    .trim()
+    .optional()
+    .nullable()
+    .refine((val) => !val || isValidCPF(val), {
+      message: 'CPF inválido. Forneça um CPF válido com 11 dígitos.',
+    }),
 })
 
 const createOrderSchema = z.object({
@@ -145,6 +160,7 @@ export async function createOrderAction(input: OrderInput): Promise<CreateOrderR
       city: string
       state: string
       zipCode: string
+  cpf?: string | null
     } | null = null
 
     if (shippingAddress) {
@@ -156,6 +172,7 @@ export async function createOrderAction(input: OrderInput): Promise<CreateOrderR
         city: shippingAddress.city,
         state: shippingAddress.state.toUpperCase(),
         zipCode: shippingAddress.zipCode,
+        cpf: shippingAddress.cpf ? sanitizeCPF(shippingAddress.cpf) : null,
       }
     } else if (addressId) {
       const dbAddr = await prisma.address.findFirst({
@@ -388,7 +405,11 @@ export async function createOrderAction(input: OrderInput): Promise<CreateOrderR
     const addressMatchesCep =
       resolvedAddress && sanitizeCEP(resolvedAddress.zipCode) === destinationCep
 
+    const rawCpf = resolvedAddress?.cpf || user.cpf || null
+    const resolvedCpf = rawCpf ? sanitizeCPF(rawCpf) : null
+
     const shippingAddressSnapshot: Prisma.InputJsonObject = {
+      ...(resolvedCpf ? { cpf: resolvedCpf } : {}),
       ...(addressMatchesCep && resolvedAddress
         ? {
             addressId: resolvedAddress.id ?? null,
@@ -408,10 +429,22 @@ export async function createOrderAction(input: OrderInput): Promise<CreateOrderR
       subtotal: Number(subtotalDecimal),
     }
 
-    // 9. Persistir Order (PENDING), OrderItems e Reserva Temporária (TTL 30 min) numa única transação atômica
+    // 9. Persistir Order (PENDING), OrderItems e Reserva Temporária numa única transação atômica
     // Regra D05: A baixa definitiva de estoque ocorre somente na confirmação do pagamento (webhook PAID).
-    const ttlMinutes = getReservationTtlMinutes()
+    // Regra Comercial: Pedidos regulares do Marketplace expiram em 10 horas.
+    const ttlMinutes = 10 * 60
     const orderExpiresAt = new Date(Date.now() + ttlMinutes * 60 * 1000)
+
+    if (!user.cpf && resolvedCpf) {
+      try {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { cpf: resolvedCpf },
+        })
+      } catch {
+        // Ignora silenciosamente eventual colisão de CPF único
+      }
+    }
 
     const order = await prisma.$transaction(async (tx) => {
       const createdOrder = await tx.order.create({
@@ -534,12 +567,6 @@ export async function processOrderPaymentAction(
   rawFormData: unknown
 ): Promise<ProcessPaymentResult> {
   const user = await getCurrentUser()
-  if (!user) {
-    return {
-      success: false,
-      error: 'Sessão expirada. Faça login novamente para concluir o pagamento.',
-    }
-  }
 
   const parsed = processPaymentSchema.safeParse({
     orderId,
@@ -568,17 +595,23 @@ export async function processOrderPaymentAction(
     const order = await prisma.order.findFirst({
       where: {
         id: parsed.data.orderId,
-        userId: user.id,
+        OR: [
+          { isAssistedSale: true },
+          ...(user ? [{ userId: user.id }] : []),
+        ],
       },
       include: {
         items: true,
+        user: true,
       },
     })
 
     if (!order) {
       return {
         success: false,
-        error: 'Pedido não encontrado ou não pertence à sua conta.',
+        error: user
+          ? 'Pedido não encontrado ou não pertence à sua conta.'
+          : 'Sessão expirada. Faça login novamente para concluir o pagamento.',
       }
     }
 
@@ -671,6 +704,43 @@ export async function processOrderPaymentAction(
       },
     })
 
+    const snapshotObj =
+      order.shippingAddressSnapshot &&
+      typeof order.shippingAddressSnapshot === 'object' &&
+      !Array.isArray(order.shippingAddressSnapshot)
+        ? (order.shippingAddressSnapshot as Record<string, unknown>)
+        : null
+
+    const snapshotRecipientName =
+      typeof snapshotObj?.recipientName === 'string' && snapshotObj.recipientName.trim()
+        ? snapshotObj.recipientName.trim()
+        : null
+
+    const snapshotExpectedEmail =
+      typeof snapshotObj?.expectedEmail === 'string' && snapshotObj.expectedEmail.trim()
+        ? snapshotObj.expectedEmail.trim()
+        : null
+
+    const notesClientNameMatch = order.adminNotes?.match(/\[Cliente:\s*([^\]]+)\]/)
+    const notesClientName = notesClientNameMatch?.[1]?.trim() || null
+
+    const fallbackFullName =
+      snapshotRecipientName ||
+      notesClientName ||
+      order.user?.name ||
+      user?.name ||
+      'Cliente'
+
+    const fallbackEmail =
+      (formData.payer?.email && formData.payer.email.includes('@')
+        ? formData.payer.email
+        : null) ||
+      order.assistedSaleExpectedEmail ||
+      snapshotExpectedEmail ||
+      order.user?.email ||
+      user?.email ||
+      'cliente@lumen3d.com.br'
+
     const paymentResponse = await paymentClient.create({
       body: {
         transaction_amount: transactionAmount,
@@ -688,18 +758,17 @@ export async function processOrderPaymentAction(
           : {}),
         metadata: {
           order_id: order.id,
-          user_id: user.id,
+          user_id: order.userId || user?.id || 'assisted_anonymous',
         },
         payer: {
-          email:
-            formData.payer?.email && formData.payer.email.includes('@')
-              ? formData.payer.email
-              : user.email,
+          email: fallbackEmail,
           first_name:
-            formData.payer?.first_name || user.name?.split(' ')[0] || undefined,
+            formData.payer?.first_name ||
+            fallbackFullName.split(' ')[0] ||
+            undefined,
           last_name:
             formData.payer?.last_name ||
-            user.name?.split(' ').slice(1).join(' ') ||
+            fallbackFullName.split(' ').slice(1).join(' ') ||
             undefined,
           identification:
             formData.payer?.identification?.type &&

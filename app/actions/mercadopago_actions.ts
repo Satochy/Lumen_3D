@@ -7,6 +7,7 @@ import { MercadoPagoConfig, Preference } from 'mercadopago'
 import { prisma } from '@/lib/prisma'
 import { getCurrentUser } from '@/lib/auth'
 import { syncOrderWithMercadoPago } from '@/lib/mercadopago_sync'
+import { isOrderExpired } from '@/lib/order_presenter'
 
 export interface CreatePreferenceResult {
   success: boolean
@@ -31,15 +32,6 @@ export async function createPreferenceAction(
   orderId: string
 ): Promise<CreatePreferenceResult> {
   const user = await getCurrentUser()
-  const cookieStore = await cookies()
-  const isUnlocked = cookieStore.get(`unlocked_order_${orderId}`)?.value === 'true'
-
-  if (!user && !isUnlocked) {
-    return {
-      success: false,
-      error: 'Você precisa estar logado ou possuir acesso autorizado a este orçamento.',
-    }
-  }
 
   const parsedId = orderIdSchema.safeParse(orderId)
   if (!parsedId.success) {
@@ -59,27 +51,12 @@ export async function createPreferenceAction(
   }
 
   try {
-    const normalizedUserEmail = user?.email?.trim().toLowerCase()
-
     const order = await prisma.order.findFirst({
       where: {
         id: parsedId.data,
         OR: [
-          // Pedidos regulares do comprador
-          ...(user ? [{ userId: user.id, isAssistedSale: false }] : []),
-          // Venda assistida: EXCLUSIVAMENTE para o e-mail esperado do comprador (Regra V21)
-          ...(user && normalizedUserEmail
-            ? [
-                {
-                  isAssistedSale: true,
-                  assistedSaleExpectedEmail: { equals: normalizedUserEmail, mode: 'insensitive' as const },
-                },
-              ]
-            : []),
-          // Pedido assistido destrancado via cookie
-          ...(isUnlocked ? [{ isAssistedSale: true }] : []),
-          // Administradores da loja
-          ...(user?.role === 'ADMIN' ? [{ isAssistedSale: true }] : []),
+          { isAssistedSale: true },
+          ...(user ? [{ userId: user.id }] : []),
         ],
       },
       include: {
@@ -96,41 +73,10 @@ export async function createPreferenceAction(
     }
 
     // Bloquear criação de preferência se o link/reserva já expirou
-    if (
-      order.expiresAt &&
-      new Date(order.expiresAt) < new Date() &&
-      order.paymentStatus === 'PENDING'
-    ) {
+    if (isOrderExpired(order)) {
       return {
         success: false,
         error: 'Este link de checkout expirou. Entre em contato com a Lúmen 3D para gerar uma nova cotação.',
-      }
-    }
-
-    // Regra V21: Para venda assistida, valida a titularidade do e-mail antes de qualquer vínculo
-    if (order.isAssistedSale) {
-      const expected = order.assistedSaleExpectedEmail?.trim().toLowerCase()
-
-      if (user && normalizedUserEmail) {
-        const isOwner = Boolean(expected && normalizedUserEmail === expected)
-        if (!isOwner && user.role !== 'ADMIN' && !isUnlocked) {
-          return {
-            success: false,
-            error: 'Acesso negado: este orçamento pertence a outro comprador.',
-          }
-        }
-
-        if (isOwner && order.userId !== user.id) {
-          await prisma.order.update({
-            where: { id: order.id },
-            data: { userId: user.id },
-          })
-        }
-      } else if (!isUnlocked) {
-        return {
-          success: false,
-          error: 'Acesso negado a este orçamento.',
-        }
       }
     }
 
@@ -243,12 +189,6 @@ export async function verifyOrderPaymentStatusAction(
   paymentId?: string | null
 ): Promise<{ success: boolean; isPaid: boolean; status?: string; error?: string }> {
   const user = await getCurrentUser()
-  const cookieStore = await cookies()
-  const isUnlocked = cookieStore.get(`unlocked_order_${orderId}`)?.value === 'true'
-
-  if (!user && !isUnlocked) {
-    return { success: false, isPaid: false, error: 'Sessão não autenticada.' }
-  }
 
   const parsedId = orderIdSchema.safeParse(orderId)
   if (!parsedId.success) {
@@ -259,9 +199,8 @@ export async function verifyOrderPaymentStatusAction(
     where: {
       id: parsedId.data,
       OR: [
+        { isAssistedSale: true },
         ...(user ? [{ userId: user.id }] : []),
-        ...(isUnlocked ? [{ isAssistedSale: true }] : []),
-        ...(user?.role === 'ADMIN' ? [{ isAssistedSale: true }] : []),
       ],
     },
     select: {

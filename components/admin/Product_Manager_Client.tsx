@@ -1,8 +1,8 @@
 'use client'
 
-import React, { useMemo, useState, useTransition } from 'react'
+import React, { useEffect, useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import {
   Package,
   Clock,
@@ -53,14 +53,18 @@ export interface SerializedAdminProduct {
 
 interface ProductManagerClientProps {
   initialProducts: SerializedAdminProduct[]
+  defaultOpenCreateModal?: boolean
 }
 
 type ProductFilterKey = 'Pronta Entrega' | 'Sob Encomenda' | 'Ativos' | 'Arquivados'
 
 export default function Product_Manager_Client({
   initialProducts,
+  defaultOpenCreateModal = false,
 }: ProductManagerClientProps) {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const actionParam = searchParams.get('action')
   const [isPending, startTransition] = useTransition()
 
   // Busca e filtros cumulativos da tela principal
@@ -74,9 +78,25 @@ export default function Product_Manager_Client({
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([])
 
   // Modais de Cadastro de Produto e Importação CSV
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(() =>
+    Boolean(defaultOpenCreateModal || actionParam === 'new')
+  )
   const [isImportModalOpen, setIsImportModalOpen] = useState(false)
   const [selectedImportFile, setSelectedImportFile] = useState<File | null>(null)
+
+  // Abre o modal de criação automaticamente quando acionado por atalho (?action=new)
+  useEffect(() => {
+    const hasNewActionInUrl =
+      typeof window !== 'undefined' &&
+      new URLSearchParams(window.location.search).get('action') === 'new'
+
+    if (defaultOpenCreateModal || actionParam === 'new' || hasNewActionInUrl) {
+      setIsCreateModalOpen(true)
+      if (typeof window !== 'undefined' && window.location.search.includes('action=new')) {
+        window.history.replaceState(null, '', window.location.pathname)
+      }
+    }
+  }, [defaultOpenCreateModal, actionParam])
 
   // Feedback de ação (erros/sucesso)
   const [feedbackMsg, setFeedbackMsg] = useState<{

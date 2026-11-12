@@ -117,7 +117,12 @@ export async function POST(request: NextRequest) {
       ).trim()
 
       const order = await prisma.order.findFirst({
-        where: { externalShipmentId: externalId },
+        where: {
+          OR: [
+            { externalShipmentId: externalId },
+            ...(incomingTracking ? [{ trackingCode: incomingTracking }] : []),
+          ],
+        },
         select: {
           id: true,
           logisticsStatus: true,
@@ -170,9 +175,13 @@ export async function POST(request: NextRequest) {
           },
         })
         shouldRevalidate = true
-      } else if (normalizedStatus === 'delivered') {
+      } else if (
+        normalizedStatus === 'delivered' ||
+        normalizedStatus.includes('delivered') ||
+        normalizedStatus.includes('entregue')
+      ) {
         const nextTracking = incomingTracking || order.trackingCode || null
-        const deliveredNote = `[Webhook Melhor Envio (${timestamp}): Pacote entregue ao destinatário]`
+        const deliveredNote = `[Webhook Melhor Envio (${timestamp}): Pacote entregue pela transportadora]`
 
         await prisma.order.update({
           where: { id: order.id },

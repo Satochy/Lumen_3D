@@ -5,9 +5,15 @@ import { revalidatePath } from 'next/cache'
 import { cookies } from 'next/headers'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { getCurrentUser, requireAdmin } from '@/lib/auth'
+import { requireAdmin } from '@/lib/auth'
 import { activeProducts } from '@/lib/product_helpers'
-import { sanitizeCEP, isValidCEP, isLocalShippingRegion } from '@/lib/shipping/shipping_utils'
+import {
+  sanitizeCEP,
+  isValidCEP,
+  isLocalShippingRegion,
+  sanitizeCPF,
+  isValidCPF,
+} from '@/lib/shipping/shipping_utils'
 import { calculateShippingAction, type ShippingOption } from './shipping_actions'
 
 export interface CatalogProductOption {
@@ -34,6 +40,7 @@ const assistedSaleItemInputSchema = z.object({
 })
 
 const createAssistedSaleDraftSchema = z.object({
+  clientName: z.string().trim().min(2, 'Informe o nome do cliente (mínimo 2 caracteres).'),
   expectedEmail: z.string().trim().email('Informe um e-mail válido para o cliente.'),
   origin: z.enum(['WhatsApp', 'Instagram', 'Outro']).default('WhatsApp'),
   adminNotes: z.string().trim().nullable().optional(),
@@ -112,7 +119,7 @@ export async function createAssistedSaleDraftAction(payload: unknown): Promise<{
       }
     }
 
-    const { expectedEmail, origin, adminNotes, items } = parsed.data
+    const { clientName, expectedEmail, origin, adminNotes, items } = parsed.data
 
     let totalAmountDecimal = new Prisma.Decimal(0)
     const orderItemsToCreate: Array<{
@@ -208,9 +215,17 @@ export async function createAssistedSaleDraftAction(payload: unknown): Promise<{
     }
 
     const now = new Date()
-    const composedNotes = `[Origem: ${origin}] [Criado por ${admin.name || admin.username} em ${now.toLocaleString('pt-BR')}]${
+    const composedNotes = `[Cliente: ${clientName}] [Origem: ${origin}] [Criado por ${admin.name || admin.username} em ${now.toLocaleString('pt-BR')}]${
       adminNotes ? ` - Observações: ${adminNotes}` : ''
     }`
+
+    const initialSnapshot: Prisma.InputJsonObject = {
+      recipientName: clientName,
+      expectedEmail: expectedEmail.toLowerCase(),
+    }
+
+    // Regra Comercial: Vendas Assistidas expiram em 24 horas.
+    const orderExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000)
 
     // Criação do pedido com userId nulo (sem usuário fictício) e sem endereço fantasma
     const order = await prisma.order.create({
@@ -221,8 +236,9 @@ export async function createAssistedSaleDraftAction(payload: unknown): Promise<{
         assistedSaleExpectedEmail: expectedEmail.toLowerCase(),
         totalAmount: totalAmountDecimal,
         shippingCost: new Prisma.Decimal(0.0),
-        shippingAddressSnapshot: Prisma.JsonNull,
+        shippingAddressSnapshot: initialSnapshot,
         adminNotes: composedNotes,
+        expiresAt: orderExpiresAt,
         items: {
           create: orderItemsToCreate,
         },
@@ -421,6 +437,12 @@ const saveAssistedShippingSchema = z.object({
     city: z.string().trim().min(2, 'Informe a cidade.'),
     state: z.string().trim().length(2, 'Informe a UF.'),
     zipCode: z.string().transform((v) => sanitizeCEP(v)),
+    cpf: z
+      .string()
+      .trim()
+      .min(11, 'Informe o CPF do destinatário.')
+      .transform((v) => sanitizeCPF(v))
+      .refine((v) => isValidCPF(v), 'Informe um CPF válido (11 dígitos).'),
   }),
   selectedShippingOption: z.object({
     serviceId: z.string().trim().min(1),
@@ -442,9 +464,6 @@ export async function saveAssistedOrderShippingAction(payload: unknown) {
     }
 
     const { orderId, shippingAddress, selectedShippingOption } = parsed.data
-    const cookieStore = await cookies()
-    const isUnlocked = cookieStore.get(`unlocked_order_${orderId}`)?.value === 'true'
-    const currentUser = await getCurrentUser()
 
     const order = await prisma.order.findUnique({
       where: { id: orderId },
@@ -459,15 +478,6 @@ export async function saveAssistedOrderShippingAction(payload: unknown) {
 
     if (!order || !order.isAssistedSale) {
       return { success: false, error: 'Pedido não encontrado.' }
-    }
-
-    const isAuthorized =
-      isUnlocked ||
-      (currentUser && currentUser.email.toLowerCase() === order.assistedSaleExpectedEmail?.toLowerCase()) ||
-      currentUser?.role === 'ADMIN'
-
-    if (!isAuthorized) {
-      return { success: false, error: 'Acesso negado a este pedido.' }
     }
 
     const destinationCep = sanitizeCEP(shippingAddress.zipCode)
@@ -508,7 +518,26 @@ export async function saveAssistedOrderShippingAction(payload: unknown) {
     )
     const finalTotal = subtotalDecimal.add(verifiedShippingCost)
 
+    const existingSnapshot =
+      order.shippingAddressSnapshot &&
+      typeof order.shippingAddressSnapshot === 'object' &&
+      !Array.isArray(order.shippingAddressSnapshot)
+        ? (order.shippingAddressSnapshot as Record<string, unknown>)
+        : null
+
+    const existingRecipientName =
+      typeof existingSnapshot?.recipientName === 'string'
+        ? existingSnapshot.recipientName
+        : undefined
+    const existingExpectedEmail =
+      typeof existingSnapshot?.expectedEmail === 'string'
+        ? existingSnapshot.expectedEmail
+        : order.assistedSaleExpectedEmail ?? undefined
+
     const shippingAddressSnapshot: Prisma.InputJsonObject = {
+      ...(existingRecipientName ? { recipientName: existingRecipientName } : {}),
+      ...(existingExpectedEmail ? { expectedEmail: existingExpectedEmail } : {}),
+      cpf: shippingAddress.cpf,
       street: shippingAddress.street,
       number: shippingAddress.number,
       complement: shippingAddress.complement || null,
