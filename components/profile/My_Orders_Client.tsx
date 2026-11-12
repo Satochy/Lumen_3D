@@ -47,7 +47,7 @@ const paymentLabels: Record<PaymentStatus, { label: string; style: string }> = {
 function getClientLogisticsBadge(order: SerializedClientOrder): { label: string; style: string } {
   if (order.logisticsStatus === 'CANCELLED' || Boolean(order.cancelledAt)) {
     return {
-      label: 'Cancelado pelo Cliente',
+      label: 'Cancelado',
       style: 'bg-rose-500/10 text-rose-400 border-rose-500/20',
     }
   }
@@ -61,8 +61,8 @@ function getClientLogisticsBadge(order: SerializedClientOrder): { label: string;
 
   if (order.paymentStatus !== 'PAID') {
     return {
-      label: 'Aguardando Pagamento',
-      style: 'bg-slate-500/10 text-slate-400 border-slate-700/60',
+      label: '',
+      style: 'hidden',
     }
   }
 
@@ -136,6 +136,9 @@ interface MyOrdersClientProps {
 export default function My_Orders_Client({ orders }: MyOrdersClientProps) {
   const [isPending, startTransition] = useTransition()
   const [localOrders, setLocalOrders] = useState<SerializedClientOrder[]>(orders)
+  const [isCancelModalOpen, setIsCancelModalOpen] = useState(false)
+  const [cancelOrderId, setCancelOrderId] = useState<string | null>(null)
+  const [cancelReason, setCancelReason] = useState('')
 
   // Inicia expandido para o pedido mais recente se existir
   const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>(() => {
@@ -193,11 +196,23 @@ export default function My_Orders_Client({ orders }: MyOrdersClientProps) {
     })
   }
 
-  const handleCancelOrder = (orderId: string) => {
-    const reason = window.prompt(
-      'Tem certeza que deseja cancelar este pedido? Se sim, informe o motivo (opcional):'
-    )
-    if (reason === null) return // Usuário cancelou o prompt
+  const handleOpenCancelModal = (orderId: string) => {
+    setCancelOrderId(orderId)
+    setCancelReason('')
+    setIsCancelModalOpen(true)
+  }
+
+  const handleCloseCancelModal = () => {
+    setIsCancelModalOpen(false)
+    setCancelOrderId(null)
+    setCancelReason('')
+  }
+
+  const handleConfirmCancel = () => {
+    if (!cancelOrderId) return
+    const orderId = cancelOrderId
+    const reason = cancelReason.trim()
+
     startTransition(async () => {
       const res = await cancelOrderByClientAction(orderId, reason || undefined)
       if (res.success) {
@@ -212,6 +227,7 @@ export default function My_Orders_Client({ orders }: MyOrdersClientProps) {
               : o
           )
         )
+        handleCloseCancelModal()
       } else {
         alert(res.error || 'Não foi possível cancelar o pedido.')
       }
@@ -393,7 +409,7 @@ export default function My_Orders_Client({ orders }: MyOrdersClientProps) {
                   {canCancelClient && (
                     <button
                       type="button"
-                      onClick={() => handleCancelOrder(order.id)}
+                      onClick={() => handleOpenCancelModal(order.id)}
                       disabled={isPending}
                       className="inline-flex items-center gap-1 px-3 py-2 text-xs font-semibold rounded-xl bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-800/40 transition cursor-pointer disabled:opacity-50"
                       title="Cancelar este pedido"
@@ -648,6 +664,43 @@ export default function My_Orders_Client({ orders }: MyOrdersClientProps) {
           </article>
         )
       })}
+      {/* Modal Customizado de Cancelamento de Pedido */}
+      {isCancelModalOpen && cancelOrderId && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black/60 z-50 p-4">
+          <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl w-full max-w-md space-y-4">
+            <h3 className="text-base font-bold text-white">Cancelar Pedido</h3>
+            <p className="text-xs text-slate-400">
+              Tem certeza que deseja cancelar este pedido? Se desejar, informe o motivo do cancelamento abaixo.
+            </p>
+            <textarea
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+              placeholder="Motivo do cancelamento (opcional)"
+              rows={3}
+              disabled={isPending}
+              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition resize-none"
+            />
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={handleCloseCancelModal}
+                disabled={isPending}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition cursor-pointer disabled:opacity-50"
+              >
+                Voltar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmCancel}
+                disabled={isPending}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition shadow-lg shadow-rose-600/20 cursor-pointer disabled:opacity-50"
+              >
+                Confirmar Cancelamento
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

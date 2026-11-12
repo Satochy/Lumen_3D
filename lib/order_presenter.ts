@@ -511,7 +511,7 @@ export function resolveOrderPaymentPresentation(order: any): {
 
   if (isOrderExpired(order)) {
     return {
-      label: 'Prazo Expirado',
+      label: 'Expirado',
       dotClass: 'bg-gray-400',
       badgeClass: 'bg-gray-500/10 text-gray-400 border-gray-500/20',
       style: 'bg-gray-500/10 text-gray-400 border-gray-500/20',
@@ -590,7 +590,7 @@ export function resolveOrderLogisticsPresentation(
   // 2. Se ainda não está pago
   if (!isPaid) {
     return {
-      label: 'Aguardando Pagto',
+      label: 'Faturando',
       badgeClass: 'bg-slate-500/10 text-slate-400 border-slate-700/60',
       isFinalized: false,
       isProductionQueue: false,

@@ -281,12 +281,14 @@ function OrderLifecycleStepper({
   const isExpired = isOrderExpired(order)
 
   if (order.isCancelled || isExpired) {
+    const isClientCancel = order.raw.adminNotes?.includes('Cancelado pelo Cliente') || false;
+    
     const titleText = isExpired ? 'Pedido Cancelado' : 'Pedido Cancelado'
     const descText = isExpired
       ? `Prazo de pagamento expirado. As operações de produção e logística foram suspensas.`
       : order.raw.cancelledAt
-        ? `Cancelado administrativamente em ${formatTimestamp(order.raw.cancelledAt)}. As operações de produção e logística foram suspensas.`
-        : 'Pedido cancelado administrativamente. As ações logísticas estão suspensas.'
+        ? `${isClientCancel ? 'Cancelado pelo cliente' : 'Cancelado administrativamente'} em ${formatTimestamp(order.raw.cancelledAt)}. As operações de produção e logística foram suspensas.`
+        : `Pedido ${isClientCancel ? 'cancelado pelo cliente' : 'cancelado administrativamente'}. As ações logísticas estão suspensas.`
 
     return (
       <div className="space-y-3">
@@ -305,7 +307,7 @@ function OrderLifecycleStepper({
             </div>
           </div>
           <span className="self-start sm:self-auto px-2.5 py-1 rounded-md text-[10px] font-bold bg-rose-900/60 text-rose-300 border border-rose-700/60 uppercase tracking-wider">
-            {isExpired ? 'Tempo de pagamento expirado' : 'Cancelado Administrativamente'}
+            {isExpired ? 'Tempo de pagamento expirado' : (isClientCancel ? 'Cancelado pelo Cliente' : 'Cancelado Administrativamente')}
           </span>
         </div>
 
@@ -1149,34 +1151,35 @@ export default function Admin_Orders_Table({
                                       <AlertCircle className="w-3 h-3" />
                                       <span>{isOrderExpired(order) ? 'Expirado' : 'Revogado'}</span>
                                     </button>
-                                  ) : !order.isPaid ? (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleCopy(order)}
-                                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-[11px] uppercase tracking-wider transition cursor-pointer shadow-md"
-                                      title="Copiar link de checkout do pedido"
+                                  ) : order.isPaid ? (
+                                    <span 
+                                      className="inline-flex items-center gap-1 text-[11px] font-mono text-emerald-400 font-bold px-2.5 py-1.5 rounded-lg bg-emerald-950/40 border border-emerald-800/40 cursor-default select-none"
+                                      title="Pagamento realizado. Acompanhe a expedição na guia 'Gerenciar Vendas'."
                                     >
-                                      {isCopied ? (
-                                        <>
-                                          <Check className="w-3 h-3 text-emerald-300" />
-                                          <span>Copiado!</span>
-                                        </>
-                                      ) : (
-                                        <>
-                                          <Copy className="w-3 h-3" />
-                                          <span>Copiar Link</span>
-                                        </>
-                                      )}
-                                    </button>
-                                  ) : (
-                                    <span className="inline-flex items-center gap-1 text-[11px] font-mono text-emerald-400 font-bold px-2.5 py-1 rounded-lg bg-emerald-950/40 border border-emerald-800/40">
-                                      <CheckCircle2 className="w-3 h-3" />
+                                      <CheckCircle2 className="w-3.5 h-3.5" />
                                       <span>Convertido</span>
                                     </span>
-                                  )}
-
-                                  {!order.isCancelled && !isOrderExpired(order) && (
+                                  ) : (
                                     <>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleCopy(order)}
+                                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-[11px] uppercase tracking-wider transition cursor-pointer shadow-md"
+                                        title="Copiar link de checkout do pedido"
+                                      >
+                                        {isCopied ? (
+                                          <>
+                                            <Check className="w-3.5 h-3.5 text-emerald-300" />
+                                            <span>Copiado!</span>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <Copy className="w-3.5 h-3.5" />
+                                            <span>Copiar Link</span>
+                                          </>
+                                        )}
+                                      </button>
+
                                       <a
                                         href={getWhatsAppShareUrl(order)}
                                         target="_blank"
@@ -1197,13 +1200,12 @@ export default function Admin_Orders_Table({
                                         <ExternalLink className="w-3.5 h-3.5" />
                                       </a>
 
-                                      {onCancelOrder && !order.isPaid && (
+                                      {onCancelOrder && (
                                         <button
                                           type="button"
                                           onClick={() => onCancelOrder(order.id)}
                                           disabled={isPending}
                                           title={`Revogar / Cancelar orçamento #${order.shortId}`}
-                                          aria-label={`Revogar orçamento #${order.shortId}`}
                                           className="p-1.5 rounded-lg bg-rose-950/40 hover:bg-rose-900/50 text-rose-400 hover:text-rose-200 border border-rose-900/50 transition disabled:opacity-50 cursor-pointer"
                                         >
                                           <XCircle className="w-3.5 h-3.5" />
